@@ -1,0 +1,60 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+
+env:
+  PROJECT_ID: medikart-494016
+  SERVICE:    medikart-app
+  REGION:     asia-south1
+  BUCKET:     medikart-494016-data
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push Docker image
+        run: |
+          gcloud builds submit ./app \
+            --tag asia-south1-docker.pkg.dev/$PROJECT_ID/medikart/$SERVICE:$GITHUB_SHA \
+            --project $PROJECT_ID
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE \
+            --image asia-south1-docker.pkg.dev/$PROJECT_ID/medikart/$SERVICE:$GITHUB_SHA \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --set-env-vars BUCKET_NAME=$BUCKET \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --project $PROJECT_ID
+
+      - name: Show service URL
+        run: |
+          gcloud run services describe $SERVICE \
+            --region $REGION \
+            --format "value(status.url)" \
+            --project $PROJECT_ID
