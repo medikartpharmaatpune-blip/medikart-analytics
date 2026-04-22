@@ -126,7 +126,7 @@ def index():
 def catch_all(path):
     if path.startswith("api/"):
         abort(404)
-    return send_file("static/index.html"
+    return send_file("static/index.html")
 
 
 if __name__ == "__main__":
