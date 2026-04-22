@@ -3,8 +3,6 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
-    paths:
-      - 'app/**'
 
 env:
   PROJECT_ID: medikart-494016
