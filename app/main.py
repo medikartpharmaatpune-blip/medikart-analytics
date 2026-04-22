@@ -119,9 +119,14 @@ def api_status():
 # ── Frontend ──────────────────────────────────────────────────────────────────
 
 @app.route("/")
-@app.route("/<path:path>")
-def index(path=""):
+def index():
     return send_file("static/index.html")
+
+@app.route("/<path:path>")
+def catch_all(path):
+    if path.startswith("api/"):
+        abort(404)
+    return send_file("static/index.html"
 
 
 if __name__ == "__main__":

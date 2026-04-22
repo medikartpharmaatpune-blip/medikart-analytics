@@ -1,1 +1,795 @@
-<h1>Medikart Analytics - Loading...</h1> 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Medikart Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f7f7f5;--sf:#fff;--s2:#f1efe8;--s3:#e8e6df;
+  --bd:rgba(0,0,0,.08);--bd2:rgba(0,0,0,.15);
+  --t1:#1a1a18;--t2:#5f5e5a;--t3:#888780;
+  --blue:#185FA5;--blu-bg:#e6f1fb;--blu-t:#0c447c;
+  --green:#1D9E75;--grn-bg:#e1f5ee;--grn-t:#085041;
+  --amber:#BA7517;--amb-bg:#faeeda;--amb-t:#633806;
+  --red:#A32D2D;--red-bg:#fcebeb;--red-t:#501313;
+  --nav-w:220px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a18;--sf:#242422;--s2:#2c2c2a;--s3:#343432;
+  --bd:rgba(255,255,255,.08);--bd2:rgba(255,255,255,.15);
+  --t1:#e8e6df;--t2:#b4b2a9;--t3:#73726c;
+  --blu-bg:#0c2a4a;--blu-t:#85b7eb;
+  --grn-bg:#04342c;--grn-t:#9fe1cb;
+  --amb-bg:#412402;--amb-t:#fac775;
+  --red-bg:#2d0f0f;--red-t:#f09595;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--t1);font-size:13px;display:flex;height:100vh;overflow:hidden}
+
+/* ── Sidebar ── */
+.nav{width:var(--nav-w);background:var(--sf);border-right:.5px solid var(--bd);
+  display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.nav-logo{padding:16px 16px 12px;border-bottom:.5px solid var(--bd)}
+.nav-logo h1{font-size:15px;font-weight:600;line-height:1.2}
+.nav-logo span{font-size:10px;color:var(--t3);display:block;margin-top:2px}
+.nav-section{padding:8px 0}
+.nav-label{padding:4px 16px;font-size:9px;font-weight:600;color:var(--t3);
+  text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 16px;
+  cursor:pointer;color:var(--t2);font-size:12px;border-left:2px solid transparent;
+  transition:background .1s}
+.nav-item:hover{background:var(--s2);color:var(--t1)}
+.nav-item.active{color:var(--blue);background:var(--blu-bg);border-left-color:var(--blue);font-weight:500}
+.nav-item.disabled{opacity:.4;cursor:default;pointer-events:none}
+.nav-icon{width:14px;height:14px;flex-shrink:0;opacity:.7}
+.nav-item.active .nav-icon{opacity:1}
+.nav-badge{margin-left:auto;font-size:9px;padding:1px 5px;border-radius:8px;
+  background:var(--amb-bg);color:var(--amb-t);font-weight:600}
+.nav-footer{margin-top:auto;padding:12px 16px;border-top:.5px solid var(--bd);
+  font-size:10px;color:var(--t3)}
+.nav-footer a{color:var(--blue);text-decoration:none}
+
+/* ── Main ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:var(--sf);border-bottom:.5px solid var(--bd);
+  padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
+.page-title{font-size:14px;font-weight:600}
+.spacer{flex:1}
+.refresh-btn{padding:5px 12px;border:.5px solid var(--bd2);border-radius:7px;
+  background:var(--s2);color:var(--t2);font-size:11px;cursor:pointer}
+.refresh-btn:hover{background:var(--grn-bg);color:var(--grn-t)}
+.last-updated{font-size:10px;color:var(--t3)}
+.content{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* ── Filter bar ── */
+.fbar{background:var(--sf);border:.5px solid var(--bd);border-radius:10px;
+  padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.fl{font-size:11px;color:var(--t3);white-space:nowrap}
+select,input[type=date],input[type=text]{padding:4px 8px;border:.5px solid var(--bd2);
+  border-radius:6px;background:var(--s2);color:var(--t1);font-size:11px}
+.bg{display:flex}
+.bg .btn{border-radius:0;border-right:none}
+.bg .btn:first-child{border-radius:6px 0 0 6px}
+.bg .btn:last-child{border-radius:0 6px 6px 0;border-right:.5px solid var(--bd2)}
+.btn{padding:4px 11px;border:.5px solid var(--bd2);background:var(--s2);
+  color:var(--t2);font-size:11px;cursor:pointer}
+.btn:hover,.btn.active{background:var(--blu-bg);color:var(--blu-t)}
+.btn-g{padding:5px 14px;border:.5px solid var(--bd2);border-radius:7px;
+  background:var(--s2);color:var(--t2);font-size:11px;cursor:pointer}
+.btn-g:hover{background:var(--grn-bg);color:var(--grn-t)}
+
+/* ── KPI strip ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.kpi{background:var(--s2);border-radius:8px;padding:10px 12px}
+.kpi-l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.kpi-v{font-size:16px;font-weight:600;line-height:1.1}
+.kpi-s{font-size:9px;color:var(--t3);margin-top:2px}
+.pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
+
+/* ── Cards ── */
+.card{background:var(--sf);border:.5px solid var(--bd);border-radius:10px;
+  padding:13px 15px;margin-bottom:12px}
+.card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.card-title{font-size:12px;font-weight:600}
+.card-sub{font-size:10px;color:var(--t3);margin-left:auto}
+.chart-wrap{position:relative;width:100%;height:220px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead th{padding:6px 8px;text-align:right;font-size:9px;font-weight:600;
+  color:var(--t3);text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:.5px solid var(--bd2);background:var(--s2);
+  cursor:pointer;white-space:nowrap;user-select:none;position:sticky;top:0}
+thead th:first-child{text-align:left}
+thead th:hover{color:var(--t1)}
+thead th.sa::after{content:" ▲";opacity:.5}
+thead th.sd::after{content:" ▼";opacity:.5}
+tbody tr{border-bottom:.5px solid var(--bd);cursor:pointer}
+tbody tr:hover{background:var(--s2)}
+tbody td{padding:5px 8px;text-align:right;font-size:11px;white-space:nowrap}
+tbody td:first-child{text-align:left;font-weight:500}
+.tfoot td{font-weight:600;border-top:.5px solid var(--bd2);background:var(--s2)}
+.pg{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:var(--t3)}
+.pg button{padding:2px 7px;border:.5px solid var(--bd2);border-radius:6px;
+  background:var(--s2);color:var(--t1);font-size:10px;cursor:pointer}
+.pg button:disabled{opacity:.3;cursor:default}
+
+/* ── Badges ── */
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600}
+.b-r{background:var(--red-bg);color:var(--red-t)}
+.b-g{background:var(--grn-bg);color:var(--grn-t)}
+.b-a{background:var(--amb-bg);color:var(--amb-t)}
+.b-b{background:var(--blu-bg);color:var(--blu-t)}
+
+/* ── Loading / error ── */
+.loading{text-align:center;padding:40px;color:var(--t3);font-size:13px}
+.error-box{background:var(--red-bg);color:var(--red-t);border-radius:8px;
+  padding:12px 16px;margin-bottom:12px;font-size:12px}
+.srch{padding:4px 8px;border:.5px solid var(--bd2);border-radius:6px;
+  background:var(--s2);color:var(--t1);font-size:11px;width:160px}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="nav-logo">
+    <h1>Medikart</h1>
+    <span>Analytics Dashboard</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Trading</div>
+    <div class="nav-item active" onclick="nav('daybook',this)">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="11" y2="9"/><line x1="5" y1="12" x2="8" y2="12"/>
+      </svg>Day Book
+    </div>
+    <div class="nav-item" onclick="nav('products',this)">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12l-1.5 7H3.5L2 4z"/><circle cx="6" cy="13" r="1"/><circle cx="11" cy="13" r="1"/>
+      </svg>Products
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+      </svg>Customers<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="4" width="12" height="9" rx="1"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/>
+      </svg>Suppliers<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 2v12M2 8h12"/>
+      </svg>Salesman<span class="nav-badge">soon</span>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Finance</div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
+      </svg>Collections<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="3" width="12" height="10" rx="1"/><line x1="2" y1="7" x2="14" y2="7"/>
+      </svg>Outstanding<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 12L6 6l3 4 2-3 3 5"/><line x1="2" y1="2" x2="2" y2="14"/><line x1="2" y1="14" x2="14" y2="14"/>
+      </svg>P &amp; L<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="2" width="5" height="12" rx="1"/><rect x="9" y="6" width="5" height="8" rx="1"/>
+      </svg>Balance Sheet<span class="nav-badge">soon</span>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Compliance</div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 2l1.5 4.5H14l-3.7 2.7 1.4 4.3L8 11l-3.7 2.5 1.4-4.3L2 6.5h4.5z"/>
+      </svg>GST Report<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 2v7m0 0l-3-3m3 3l3-3"/><rect x="2" y="11" width="12" height="3" rx="1"/>
+      </svg>Expiry Alerts<span class="nav-badge">soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12v8H2zM6 4V2h4v2"/>
+      </svg>Pending CN/DN<span class="nav-badge">soon</span>
+    </div>
+  </div>
+
+  <div class="nav-footer">
+    Data refreshes every 15 min<br>
+    <span id="nav-updated"></span>
+  </div>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────── -->
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="page-title">Day Book</div>
+    <div class="spacer"></div>
+    <span class="last-updated" id="last-updated"></span>
+    <button class="refresh-btn" onclick="refreshData()">↻ Refresh</button>
+  </div>
+  <div class="content" id="content">
+    <div class="loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+const API = '';  // same origin
+let STATE = { page:'daybook', data:{}, grain:'day', sk:'date', sd:-1, pg:0 };
+const PS = 50;
+
+// ── utils ──────────────────────────────────────────────────────
+const inr = v => {
+  const a=Math.abs(parseFloat(v)||0), s=v<0?'-':'';
+  if(a>=1e7) return s+'₹'+(a/1e5).toFixed(1)+'L';
+  if(a>=1e5) return s+'₹'+(a/1e5).toFixed(2)+'L';
+  if(a>=1e3) return s+'₹'+(a/1e3).toFixed(1)+'K';
+  return s+'₹'+a.toFixed(0);
+};
+const num = v => (parseFloat(v)||0).toLocaleString('en-IN');
+const pct = (a,b) => b?(a/b*100).toFixed(1)+'%':'—';
+const cc  = v => parseFloat(v)>=0?'pos':'neg';
+const fmt = d => d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
+
+// ── navigation ─────────────────────────────────────────────────
+function nav(page, el) {
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');
+  STATE.page = page;
+  STATE.pg   = 0;
+  const titles = {daybook:'Day Book', products:'Products'};
+  document.getElementById('page-title').textContent = titles[page] || page;
+  loadPage(page);
+}
+
+async function loadPage(page) {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading">Loading data...</div>';
+  try {
+    if (!STATE.data[page]) {
+      const map = {daybook:'daybook', products:'products'};
+      const res  = await fetch(`${API}/api/${map[page]||page}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      STATE.data[page] = await res.json();
+    }
+    renderPage(page);
+  } catch(e) {
+    content.innerHTML = `<div class="error-box">Failed to load data: ${e.message}</div>`;
+  }
+}
+
+async function refreshData() {
+  await fetch(`${API}/api/refresh`);
+  STATE.data = {};
+  loadPage(STATE.page);
+}
+
+// ── render dispatcher ──────────────────────────────────────────
+function renderPage(page) {
+  try{
+    if (page === 'daybook')  renderDaybook();
+    if (page === 'products') renderProducts();
+  }catch(e){
+    document.getElementById('content').innerHTML=
+      `<div class="error-box">Render error: ${e.message}<br><pre style="font-size:10px;margin-top:6px">${e.stack}</pre></div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DAY BOOK
+// ══════════════════════════════════════════════════════════════
+let db_filt=[], db_chart=null;
+const GKEY={day:'date',week:'week',month:'month',quarter:'quarter',year:'year'};
+const GLBL={day:'Date',week:'Week',month:'Month',quarter:'Quarter',year:'Year'};
+
+function dbAgg(rows,gk){
+  const m={};
+  rows.forEach(r=>{
+    const k=r[gk]||r.date;
+    if(!m[k])m[k]={period:k,date:r.date,dow:r.dow||'',
+      sale:0,sale_gst:0,sale_disc:0,purchase:0,pur_gross:0,pur_gst:0,
+      pur_discount:0,collection:0,credit_note:0,debit_note:0,
+      profit:0,gross_profit:0,net_profit:0,bills:0,pur_bills:0,
+      op_stock:r.op_stock,cl_stock:r.cl_stock,_rows:[]};
+    const x=m[k];
+    ['sale','sale_gst','sale_disc','purchase','pur_gross','pur_gst','pur_discount',
+     'collection','credit_note','debit_note','profit','gross_profit','net_profit','bills','pur_bills']
+      .forEach(c=>x[c]+=(parseFloat(r[c])||0));
+    x.cl_stock=r.cl_stock; x._rows.push(r);
+  });
+  return Object.values(m).map(x=>({...x,
+    margin_pct:    x.sale?x.gross_profit/x.sale*100:0,
+    net_margin_pct:x.sale?x.net_profit/x.sale*100:0,
+    collection_pct:x.sale?x.collection/x.sale*100:0,
+  }));
+}
+
+function renderDaybook() {
+  const raw = STATE.data.daybook || [];
+  const content = document.getElementById('content');
+
+  // date range defaults
+  const dates = raw.map(r=>r.date).sort();
+  const today = new Date().toISOString().substring(0,10);
+  const from90= new Date(Date.now()-90*86400000).toISOString().substring(0,10);
+  const defFrom = dates.length ? (dates[0]>from90?dates[0]:from90) : from90;
+
+  content.innerHTML = `
+  <div class="fbar">
+    <span class="fl">View</span>
+    <div class="bg">
+      <button class="btn active" onclick="dbGrain('day',this)">Day</button>
+      <button class="btn" onclick="dbGrain('week',this)">Week</button>
+      <button class="btn" onclick="dbGrain('month',this)">Month</button>
+      <button class="btn" onclick="dbGrain('quarter',this)">Quarter</button>
+      <button class="btn" onclick="dbGrain('year',this)">Year</button>
+    </div>
+    <span class="fl">From</span><input type="date" id="db-from" value="${defFrom}" onchange="dbRun()">
+    <span class="fl">To</span><input type="date" id="db-to" value="${today}" onchange="dbRun()">
+    <select id="db-qr" onchange="dbQuick(this.value)">
+      <option value="90" selected>Last 90 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="7">Last 7 days</option>
+      <option value="fy">This FY</option>
+      <option value="cm">This month</option>
+      <option value="lm">Last month</option>
+      <option value="all">All data</option>
+    </select>
+    <select id="db-chart" onchange="dbRenderChart()">
+      <option value="all">Sale + Purchase + Profit</option>
+      <option value="sp">Sale vs Purchase</option>
+      <option value="profit">Profit trend</option>
+      <option value="stock">Stock levels</option>
+      <option value="collection">Collection</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn-g" onclick="dbExport()">Export ↓</button>
+  </div>
+  <div class="kpi-grid" id="db-kpis"></div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-title" id="db-chart-title">Chart</div></div>
+    <div class="chart-wrap"><canvas id="db-chart-canvas"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-title" id="db-tbl-title">Daily detail</div>
+      <input class="srch" id="db-srch" placeholder="Search…" oninput="dbSearch(this.value)">
+      <div class="card-sub" id="db-cnt"></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead id="db-thead"></thead>
+      <tbody id="db-tbody"></tbody>
+    </table></div>
+    <div class="pg" id="db-pg"></div>
+  </div>`;
+
+  dbRun();
+}
+
+function dbQuick(v){
+  const today=new Date(), fmt=d=>d.toISOString().substring(0,10);
+  const fyStart=()=>new Date(today.getMonth()>=3?today.getFullYear():today.getFullYear()-1,3,1);
+  let from='',to=fmt(today);
+  if(v==='all'){from='';to='';}
+  else if(v==='cm'){from=fmt(new Date(today.getFullYear(),today.getMonth(),1));}
+  else if(v==='lm'){
+    from=fmt(new Date(today.getFullYear(),today.getMonth()-1,1));
+    to=fmt(new Date(today.getFullYear(),today.getMonth(),0));}
+  else if(v==='fy'){from=fmt(fyStart());}
+  else{from=fmt(new Date(today-v*86400000));}
+  document.getElementById('db-from').value=from;
+  document.getElementById('db-to').value=to;
+  dbRun();
+}
+
+function dbGrain(g,el){
+  STATE.grain=g; STATE.pg=0;
+  document.querySelectorAll('.bg .btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('db-tbl-title').textContent=GLBL[g]+'-wise trading summary';
+  dbRun();
+}
+
+function dbRun(){
+  const raw=STATE.data.daybook||[];
+  const from=document.getElementById('db-from')?.value||'';
+  const to=document.getElementById('db-to')?.value||'';
+  let rows=raw;
+  if(from) rows=rows.filter(r=>r.date>=from);
+  if(to)   rows=rows.filter(r=>r.date<=to);
+  db_filt=dbAgg(rows,GKEY[STATE.grain]);
+  db_filt.sort((a,b)=>a.date>b.date?1:-1);
+  STATE.pg=0;
+  dbRenderKPIs(); dbRenderChart(); dbRenderHead(); dbRenderTbl();
+}
+
+function dbSearch(q){
+  const all=db_filt;
+  const disp=q?all.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())):all;
+  STATE._dbDisp=disp; STATE.pg=0;
+  dbRenderTbl(disp);
+}
+
+function dbRenderKPIs(){
+  const t=db_filt.reduce((a,r)=>{
+    ['sale','purchase','collection','credit_note','debit_note','profit',
+     'gross_profit','net_profit','sale_disc','pur_discount','pur_gst','bills']
+      .forEach(k=>a[k]=(a[k]||0)+(parseFloat(r[k])||0));
+    return a;
+  },{});
+  const op=db_filt.length?db_filt[0].op_stock:0;
+  const cl=db_filt.length?db_filt[db_filt.length-1].cl_stock:0;
+  const kpis=[
+    {l:'Sale',         v:inr(t.sale),        s:num(Math.round(t.bills))+' bills'},
+    {l:'Purchase',     v:inr(t.purchase),     s:'GST '+inr(t.pur_gst)},
+    {l:'Gross profit', v:inr(t.gross_profit), s:pct(t.gross_profit,t.sale)+' margin',c:'pos'},
+    {l:'Sale CN',      v:inr(t.credit_note),  s:'Customer returns',c:'neg'},
+    {l:'Pur DN',       v:inr(t.debit_note),   s:'Supplier returns',c:'pos'},
+    {l:'Net profit',   v:inr(t.net_profit),   s:pct(t.net_profit,t.sale)+' net margin',c:'pos'},
+    {l:'Collection',   v:inr(t.collection),   s:pct(t.collection,t.sale)+' of sales'},
+    {l:'Sale disc',    v:inr(t.sale_disc),    s:'CD + scheme'},
+    {l:'Pur disc',     v:inr(t.pur_discount), s:'Item + scheme'},
+    {l:'Closing stock',v:inr(cl),             s:'Opening '+inr(op)},
+  ];
+  document.getElementById('db-kpis').innerHTML=kpis.map(k=>
+    `<div class="kpi"><div class="kpi-l">${k.l}</div>
+     <div class="kpi-v ${k.c||''}">${k.v}</div>
+     <div class="kpi-s">${k.s}</div></div>`
+  ).join('');
+}
+
+const DB_COLORS={sale:'#185FA5',purchase:'#E24B4A',gross_profit:'#1D9E75',
+  net_profit:'#085041',collection:'#534AB7',op_stock:'#85B7EB',cl_stock:'#5DCAA5'};
+const DB_MSETS={all:['sale','purchase','gross_profit'],sp:['sale','purchase'],
+  profit:['gross_profit','net_profit'],stock:['op_stock','cl_stock'],collection:['collection','sale']};
+const DB_LABELS={sale:'Sale',purchase:'Purchase',gross_profit:'Gross profit',
+  net_profit:'Net profit',collection:'Collection',op_stock:'Op stock',cl_stock:'Cl stock'};
+
+function dbRenderChart(){
+  const metric=document.getElementById('db-chart')?.value||'all';
+  const keys=DB_MSETS[metric];
+  const labels=db_filt.map(r=>r.period);
+  const datasets=keys.map(k=>({
+    label:DB_LABELS[k],
+    data:db_filt.map(r=>+((parseFloat(r[k])||0)/1000).toFixed(1)),
+    backgroundColor:DB_COLORS[k]+(keys.length>2?'66':'99'),
+    borderColor:DB_COLORS[k],borderWidth:1.5,
+    type:['gross_profit','net_profit','collection'].includes(k)?'line':'bar',
+    tension:.3,pointRadius:labels.length>30?0:2,fill:false,order:1
+  }));
+  document.getElementById('db-chart-title').textContent=
+    Object.values(DB_LABELS).filter((_,i)=>keys[i]).join(' / ');
+  if(db_chart)db_chart.destroy();
+  db_chart=new Chart(document.getElementById('db-chart-canvas'),{
+    type:'bar',data:{labels,datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ₹${c.raw}K`}}},
+      scales:{
+        y:{ticks:{font:{size:9},callback:v=>'₹'+v+'K'},grid:{color:'rgba(128,128,128,.08)'}},
+        x:{ticks:{font:{size:9},autoSkip:true,maxTicksLimit:20,maxRotation:30}}
+      }}
+  });
+}
+
+const DB_COLS=[
+  {k:'period',l:g=>GLBL[g],      r:false,f:(v,r)=>{
+    const b=r.dow==='Sun'?'<span class="badge b-r">Sun</span>':
+            r.dow==='Sat'?'<span class="badge b-a">Sat</span>':'';
+    return v+' '+b;}},
+  {k:'sale',      l:()=>'Sale',        r:true,f:v=>inr(v)},
+  {k:'sale_disc', l:()=>'Sale disc',   r:true,f:v=>inr(v)},
+  {k:'purchase',  l:()=>'Purchase',    r:true,f:v=>inr(v)},
+  {k:'pur_gst',   l:()=>'GST (pur)',   r:true,f:v=>inr(v)},
+  {k:'pur_discount',l:()=>'Pur disc',  r:true,f:v=>inr(v)},
+  {k:'gross_profit',l:()=>'Gross profit',r:true,
+    f:(v,r)=>`<span class="${cc(v)}">${inr(v)}</span> <span style="font-size:9px;color:var(--t3)">${(+r.margin_pct||0).toFixed(1)}%</span>`},
+  {k:'credit_note', l:()=>'Sale CN',   r:true,f:v=>`<span class="${parseFloat(v)>0?'neg':''}">${inr(v)}</span>`},
+  {k:'debit_note',  l:()=>'Pur DN',    r:true,f:v=>`<span class="${parseFloat(v)>0?'pos':''}">${inr(v)}</span>`},
+  {k:'net_profit',  l:()=>'Net profit',r:true,
+    f:v=>`<span class="${cc(v)}" style="font-weight:600">${inr(v)}</span>`},
+  {k:'collection',  l:()=>'Collection',r:true,
+    f:(v,r)=>`${inr(v)} <span style="font-size:9px;color:var(--t3)">${(+r.collection_pct||0).toFixed(1)}%</span>`},
+  {k:'cl_stock',    l:()=>'Cl stock',  r:true,f:v=>inr(v)},
+  {k:'bills',       l:()=>'Bills',     r:true,f:v=>num(Math.round(v))},
+];
+
+function dbRenderHead(){
+  const g=STATE.grain;
+  document.getElementById('db-thead').innerHTML='<tr>'+
+    DB_COLS.map(c=>{
+      const cls=STATE.sk===c.k?(STATE.sd===1?'sa':'sd'):'';
+      return`<th class="${cls}" onclick="dbSort('${c.k}')">${c.l(g)}</th>`;
+    }).join('')+'</tr>';
+}
+
+function dbSort(k){
+  STATE.sd=STATE.sk===k?STATE.sd*-1:-1; STATE.sk=k;
+  db_filt.sort((a,b)=>a[k]>b[k]?STATE.sd:a[k]<b[k]?-STATE.sd:0);
+  STATE.pg=0; dbRenderHead(); dbRenderTbl();
+}
+
+function dbRenderTbl(disp){
+  disp=disp||STATE._dbDisp||db_filt;
+  STATE._dbDisp=disp;
+  document.getElementById('db-cnt').textContent=disp.length.toLocaleString()+' rows';
+  const rows=disp.slice(STATE.pg*PS,(STATE.pg+1)*PS);
+  const tot=disp.reduce((a,r)=>{
+    ['sale','sale_disc','purchase','pur_gst','pur_discount','collection',
+     'credit_note','debit_note','profit','gross_profit','net_profit','bills']
+      .forEach(k=>a[k]=(a[k]||0)+(parseFloat(r[k])||0));
+    return a;
+  },{});
+  tot.period='TOTAL'; tot.dow='';
+  tot.margin_pct=tot.sale?tot.gross_profit/tot.sale*100:0;
+  tot.net_margin_pct=tot.sale?tot.net_profit/tot.sale*100:0;
+  tot.collection_pct=tot.sale?tot.collection/tot.sale*100:0;
+  tot.cl_stock=disp.length?disp[disp.length-1].cl_stock:0;
+
+  const mkRow=(r,isTot)=>`<tr class="${isTot?'tfoot':''}">
+    ${DB_COLS.map(c=>`<td style="text-align:${c.r?'right':'left'}">${c.f?c.f(r[c.k],r):(r[c.k]??'—')}</td>`).join('')}
+  </tr>`;
+
+  document.getElementById('db-tbody').innerHTML=
+    rows.map(r=>mkRow(r,false)).join('')+mkRow(tot,true);
+  dbRenderPg(disp);
+}
+
+function dbRenderPg(disp){
+  const tot=Math.ceil(disp.length/PS)||1;
+  document.getElementById('db-pg').innerHTML=
+    `<button ${STATE.pg===0?'disabled':''} onclick="STATE.pg--;dbRenderTbl()">← Prev</button>
+     <span style="padding:0 6px">Page ${STATE.pg+1}/${tot}</span>
+     <button ${STATE.pg>=tot-1?'disabled':''} onclick="STATE.pg++;dbRenderTbl()">Next →</button>
+     <span> · ${disp.length.toLocaleString()} rows</span>`;
+}
+
+function dbExport(){
+  const disp=STATE._dbDisp||db_filt;
+  const data=disp.map(r=>({
+    [GLBL[STATE.grain]]: r.period,
+    'Sale':              parseFloat(r.sale)||0,
+    'Sale disc':         parseFloat(r.sale_disc)||0,
+    'Purchase':          parseFloat(r.purchase)||0,
+    'GST (purch)':       parseFloat(r.pur_gst)||0,
+    'Pur disc':          parseFloat(r.pur_discount)||0,
+    'Gross profit':      parseFloat(r.gross_profit)||0,
+    'Gross margin %':    parseFloat(r.margin_pct)||0,
+    'Sale CN':           parseFloat(r.credit_note)||0,
+    'Pur DN':            parseFloat(r.debit_note)||0,
+    'Net profit':        parseFloat(r.net_profit)||0,
+    'Collection':        parseFloat(r.collection)||0,
+    'Cl stock':          parseFloat(r.cl_stock)||0,
+    'Bills':             Math.round(parseFloat(r.bills)||0),
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Day Book');
+  XLSX.writeFile(wb,`Medikart_DayBook_${STATE.grain}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════════════════
+// PRODUCTS
+// ══════════════════════════════════════════════════════════════
+let prod_chart=null, prod_data=[], prod_sk='sale_val', prod_sd=-1, prod_pg=0;
+
+function renderProducts(){
+  const d=STATE.data.products||{};
+  const content=document.getElementById('content');
+  const ss=d.stock_summary||{};
+
+  content.innerHTML=`
+  <div class="fbar">
+    <span class="fl">View</span>
+    <div class="bg">
+      <button class="btn active" onclick="prodView('top',this)">Top sellers</button>
+      <button class="btn" onclick="prodView('slow',this)">Slow moving</button>
+      <button class="btn" onclick="prodView('expiry',this)">Near expiry</button>
+      <button class="btn" onclick="prodView('stock',this)">Stock availability</button>
+    </div>
+    <input class="srch" id="prod-srch" placeholder="Search product…" oninput="prodSearch(this.value)">
+    <div class="spacer"></div>
+    <button class="btn-g" onclick="prodExport()">Export ↓</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-l">Total batches</div>
+      <div class="kpi-v">${num(ss.total_batches||0)}</div><div class="kpi-s">in stock</div></div>
+    <div class="kpi"><div class="kpi-l">Stock value (cost)</div>
+      <div class="kpi-v">${inr(ss.total_cl_value||0)}</div><div class="kpi-s">at purchase rate</div></div>
+    <div class="kpi"><div class="kpi-l">Stock value (MRP)</div>
+      <div class="kpi-v">${inr(ss.total_cl_mrp||0)}</div><div class="kpi-s">at MRP</div></div>
+    <div class="kpi"><div class="kpi-l">Near expiry</div>
+      <div class="kpi-v warn">${num(ss.near_expiry_count||0)}</div><div class="kpi-s">within 90 days</div></div>
+    <div class="kpi"><div class="kpi-l">Slow moving</div>
+      <div class="kpi-v warn">${num(ss.slow_moving_count||0)}</div><div class="kpi-s">no sale 60+ days</div></div>
+    <div class="kpi"><div class="kpi-l">On hold</div>
+      <div class="kpi-v ${(ss.on_hold||0)>0?'neg':''}">${num(ss.on_hold||0)}</div><div class="kpi-s">batches</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">Top 20 products by sale value</div></div>
+    <div class="chart-wrap"><canvas id="prod-chart-canvas"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-title" id="prod-tbl-title">Top selling products</div>
+      <div class="card-sub" id="prod-cnt"></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead id="prod-thead"></thead>
+      <tbody id="prod-tbody"></tbody>
+    </table></div>
+    <div class="pg" id="prod-pg"></div>
+  </div>`;
+
+  prodView('top', document.querySelector('.bg .btn'));
+  prodRenderChart(d.top_products||[]);
+}
+
+function prodView(view, el){
+  const d=STATE.data.products||{};
+  document.querySelectorAll('.bg .btn').forEach(b=>b.classList.remove('active'));
+  el?.classList.add('active');
+  prod_pg=0;
+  if(view==='top'){
+    prod_data=d.top_products||[];
+    prod_sk='sale_val'; prod_sd=-1;
+    document.getElementById('prod-tbl-title').textContent='Top selling products';
+    prodRenderHead(['product','qty','sale_val','profit','margin_pct','cd_amt']);
+  } else if(view==='slow'){
+    prod_data=d.slow_moving||[];
+    prod_sk='value'; prod_sd=-1;
+    document.getElementById('prod-tbl-title').textContent='Slow / non-moving stock';
+    prodRenderHead(['product','batch','qty','value','days_since_sale','last_sale']);
+  } else if(view==='expiry'){
+    prod_data=d.near_expiry||[];
+    prod_sk='days_to_expiry'; prod_sd=1;
+    document.getElementById('prod-tbl-title').textContent='Near expiry batches (within 90 days)';
+    prodRenderHead(['product','batch','expiry','days_to_expiry','qty','mrp','value','godown']);
+  } else if(view==='stock'){
+    prod_data=d.stock_availability||[];
+    prod_sk='value'; prod_sd=-1;
+    document.getElementById('prod-tbl-title').textContent='Stock availability';
+    prodRenderHead(['product','batch','expiry','qty','mrp','pur_rate','value','godown']);
+  }
+  prod_data.sort((a,b)=>a[prod_sk]>b[prod_sk]?prod_sd:a[prod_sk]<b[prod_sk]?-prod_sd:0);
+  prodRenderTbl();
+}
+
+function prodSearch(q){
+  const all=STATE._prodAll||prod_data;
+  STATE._prodAll=prod_data;
+  const disp=q?prod_data.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())):prod_data;
+  STATE._prodDisp=disp; prod_pg=0;
+  prodRenderTbl(disp);
+}
+
+const PROD_COL_DEFS={
+  product:       {l:'Product',          r:false, f:v=>v},
+  batch:         {l:'Batch',            r:false, f:v=>v},
+  qty:           {l:'Qty',              r:true,  f:v=>num(Math.round(v))},
+  sale_val:      {l:'Sale value',       r:true,  f:v=>inr(v)},
+  profit:        {l:'Profit',           r:true,  f:v=>`<span class="${cc(v)}">${inr(v)}</span>`},
+  margin_pct:    {l:'Margin %',         r:true,  f:v=>(parseFloat(v)||0).toFixed(1)+'%'},
+  cd_amt:        {l:'CD given',         r:true,  f:v=>inr(v)},
+  value:         {l:'Value (cost)',     r:true,  f:v=>inr(v)},
+  days_since_sale:{l:'Days idle',       r:true,
+    f:v=>{const n=parseInt(v)||0;
+      return`<span class="${n>90?'neg':n>60?'warn':''}">${n>=9999?'Never':n}</span>`}},
+  last_sale:     {l:'Last sale',        r:true,  f:v=>v?fmt(v):'Never'},
+  days_to_expiry:{l:'Days left',        r:true,
+    f:v=>{const n=parseInt(v)||0;
+      return`<span class="${n<0?'neg':n<30?'neg':n<60?'warn':'pos'}">${n<0?'EXPIRED':n}</span>`}},
+  expiry:        {l:'Expiry',           r:true,  f:v=>v||'—'},
+  mrp:           {l:'MRP',             r:true,  f:v=>inr(v)},
+  pur_rate:      {l:'Pur rate',         r:true,  f:v=>inr(v)},
+  godown:        {l:'Godown',           r:false, f:v=>v||'—'},
+};
+
+let prod_vis_cols=[];
+function prodRenderHead(cols){
+  prod_vis_cols=cols;
+  document.getElementById('prod-thead').innerHTML='<tr>'+
+    cols.map(k=>{
+      const c=PROD_COL_DEFS[k]||{l:k,r:true};
+      const cls=prod_sk===k?(prod_sd===1?'sa':'sd'):'';
+      return`<th class="${cls}" onclick="prodSort('${k}')" style="text-align:${c.r?'right':'left'}">${c.l}</th>`;
+    }).join('')+'</tr>';
+}
+
+function prodSort(k){
+  prod_sd=prod_sk===k?prod_sd*-1:-1; prod_sk=k;
+  prod_data.sort((a,b)=>a[k]>b[k]?prod_sd:a[k]<b[k]?-prod_sd:0);
+  prod_pg=0; prodRenderHead(prod_vis_cols); prodRenderTbl();
+}
+
+function prodRenderTbl(disp){
+  disp=disp||STATE._prodDisp||prod_data;
+  STATE._prodDisp=disp;
+  document.getElementById('prod-cnt').textContent=disp.length.toLocaleString()+' products';
+  const rows=disp.slice(prod_pg*PS,(prod_pg+1)*PS);
+  document.getElementById('prod-tbody').innerHTML=rows.map(r=>`<tr>
+    ${prod_vis_cols.map(k=>{
+      const c=PROD_COL_DEFS[k]||{r:true,f:v=>v};
+      return`<td style="text-align:${c.r?'right':'left'}">${c.f?c.f(r[k],r):(r[k]??'—')}</td>`;
+    }).join('')}
+  </tr>`).join('');
+  const tot=Math.ceil(disp.length/PS)||1;
+  document.getElementById('prod-pg').innerHTML=
+    `<button ${prod_pg===0?'disabled':''} onclick="prod_pg--;prodRenderTbl()">← Prev</button>
+     <span style="padding:0 6px">Page ${prod_pg+1}/${tot}</span>
+     <button ${prod_pg>=tot-1?'disabled':''} onclick="prod_pg++;prodRenderTbl()">Next →</button>
+     <span> · ${disp.length.toLocaleString()} items</span>`;
+}
+
+function prodRenderChart(top){
+  const top20=top.slice(0,20);
+  const labels=top20.map(r=>(r.product||'').substring(0,25));
+  const data=top20.map(r=>+((parseFloat(r.sale_val)||0)/1000).toFixed(1));
+  const prof=top20.map(r=>+((parseFloat(r.profit)||0)/1000).toFixed(1));
+  if(prod_chart)prod_chart.destroy();
+  prod_chart=new Chart(document.getElementById('prod-chart-canvas'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Sale',data,backgroundColor:'#185FA599',borderColor:'#185FA5',borderWidth:1},
+      {label:'Profit',data:prof,backgroundColor:'#1D9E7599',borderColor:'#1D9E75',borderWidth:1},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ₹${c.raw}K`}}},
+      scales:{
+        y:{ticks:{font:{size:9},callback:v=>'₹'+v+'K'},grid:{color:'rgba(128,128,128,.08)'}},
+        x:{ticks:{font:{size:8},autoSkip:false,maxRotation:45}}
+      }}
+  });
+}
+
+function prodExport(){
+  const disp=STATE._prodDisp||prod_data;
+  const ws=XLSX.utils.json_to_sheet(disp);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Products');
+  XLSX.writeFile(wb,'Medikart_Products.xlsx');
+}
+
+// ── init ───────────────────────────────────────────────────────
+async function init(){
+  loadPage('daybook');
+  try{
+    const m=await fetch(`${API}/api/status`);
+    const mj=await m.json();
+    document.getElementById('last-updated').textContent=
+      mj.files ? mj.files.length+' data files' : '';
+  }catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
