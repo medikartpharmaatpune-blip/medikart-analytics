@@ -450,7 +450,7 @@ function dbRenderKPIs(){
     {l:'Net profit',   v:inr(t.net_profit),   s:pct(t.net_profit,t.sale)+' net margin',c:'pos'},
     {l:'Collection',   v:inr(t.collection),   s:pct(t.collection,t.sale)+' of sales'},
     {l:'Sale disc',    v:inr(t.sale_disc),    s:'CD + scheme'},
-    {l:'Pur disc',     v:inr(t.pur_discount), s:'Item + scheme'},
+    {l:'Pur disc',     v:inr(t.pur_discount||0), s:'Item + scheme'},
     {l:'Closing stock',v:inr(cl),             s:'Opening '+inr(op)},
   ];
   document.getElementById('db-kpis').innerHTML=kpis.map(k=>
@@ -510,7 +510,7 @@ const DB_COLS=[
   {k:'credit_note', l:()=>'Sale CN',   r:true,f:v=>`<span class="${parseFloat(v)>0?'neg':''}">${inr(v)}</span>`},
   {k:'debit_note',  l:()=>'Pur DN',    r:true,f:v=>`<span class="${parseFloat(v)>0?'pos':''}">${inr(v)}</span>`},
   {k:'net_profit',  l:()=>'Net profit',r:true,
-    f:v=>`<span class="${cc(v)}" style="font-weight:600">${inr(v)}</span>`},
+    f:(v,r)=>`<span class="${cc(v)}" style="font-weight:600">${inr(v)}</span> <span style="font-size:9px;color:var(--t3)">${(+r.net_margin_pct||0).toFixed(1)}%</span>`},
   {k:'collection',  l:()=>'Collection',r:true,
     f:(v,r)=>`${inr(v)} <span style="font-size:9px;color:var(--t3)">${(+r.collection_pct||0).toFixed(1)}%</span>`},
   {k:'cl_stock',    l:()=>'Cl stock',  r:true,f:v=>inr(v)},

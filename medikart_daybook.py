@@ -358,13 +358,23 @@ def build_daybook(folder: Path) -> list:
     merged["date"] = pd.to_datetime(merged["date"])
 
     for c in ["sale","sale_gst","sale_disc","purchase","pur_gross","pur_gst",
-              "pur_discount","pur_item_disc","pur_scm_amt","collection","collection_discount","credit_note",
+              "pur_discount","pur_item_disc","pur_scm_amt",
+              "collection","collection_discount","credit_note",
               "debit_note","profit","bills","pur_bills","sale_qty","receipts"]:
         if c not in merged.columns: merged[c] = 0.0
         merged[c] = n(merged[c])
 
     merged["gross_profit"] = merged["profit"].round(2)
-    merged["net_profit"]   = (merged["profit"] - merged["credit_note"] + merged["debit_note"]).round(2)
+    # Net Profit = Gross Profit - Sale Disc - Sale CN + Pur Disc + Pur DN
+    # pur_discount is negative (DISC_AMT stored negative) + SCM_AMT positive
+    # so we subtract it (double negative = add) — take abs for clarity
+    merged["net_profit"] = (
+        merged["profit"]
+        - merged["sale_disc"]     # sale discount given to customer
+        - merged["credit_note"]   # sale CN (customer returns)
+        + merged["pur_discount"]  # purchase discount (negative = reduces cost = adds to profit)
+        + merged["debit_note"]    # purchase DN
+    ).round(2)
 
     # Rolling stock at cost (purchase gross = cost of goods in)
     running = stk["op_stock"]
