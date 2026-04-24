@@ -310,12 +310,12 @@ function dbAgg(rows,gk){
     const k=r[gk]||r.date;
     if(!m[k])m[k]={period:k,date:r.date,dow:r.dow||'',
       sale:0,sale_gst:0,sale_disc:0,purchase:0,pur_gross:0,pur_gst:0,
-      pur_discount:0,collection:0,credit_note:0,debit_note:0,
+      pur_discount:0,collection:0,collection_discount:0,credit_note:0,debit_note:0,
       profit:0,gross_profit:0,net_profit:0,bills:0,pur_bills:0,
       op_stock:r.op_stock,cl_stock:r.cl_stock,_rows:[]};
     const x=m[k];
     ['sale','sale_gst','sale_disc','purchase','pur_gross','pur_gst','pur_discount',
-     'collection','credit_note','debit_note','profit','gross_profit','net_profit','bills','pur_bills']
+     'collection','collection_discount','credit_note','debit_note','profit','gross_profit','net_profit','bills','pur_bills']
       .forEach(c=>x[c]+=(parseFloat(r[c])||0));
     x.cl_stock=r.cl_stock; x._rows.push(r);
   });
@@ -450,6 +450,7 @@ function dbRenderKPIs(){
     {l:'Net profit',   v:inr(t.net_profit),   s:pct(t.net_profit,t.sale)+' net margin',c:'pos'},
     {l:'Collection',   v:inr(t.collection),   s:pct(t.collection,t.sale)+' of sales'},
     {l:'Sale disc',    v:inr(t.sale_disc),    s:'CD + scheme'},
+    {l:'Coll disc',    v:inr(t.collection_discount||0), s:'Bulk payment disc',c:'neg'},
     {l:'Pur disc',     v:inr(t.pur_discount||0), s:'Item + scheme'},
     {l:'Closing stock',v:inr(cl),             s:'Opening '+inr(op)},
   ];
@@ -538,7 +539,7 @@ function dbRenderTbl(disp){
   document.getElementById('db-cnt').textContent=disp.length.toLocaleString()+' rows';
   const rows=disp.slice(STATE.pg*PS,(STATE.pg+1)*PS);
   const tot=disp.reduce((a,r)=>{
-    ['sale','sale_disc','purchase','pur_gst','pur_discount','collection',
+    ['sale','sale_disc','purchase','pur_gst','pur_discount','collection','collection_discount',
      'credit_note','debit_note','profit','gross_profit','net_profit','bills']
       .forEach(k=>a[k]=(a[k]||0)+(parseFloat(r[k])||0));
     return a;

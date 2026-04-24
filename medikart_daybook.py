@@ -370,10 +370,11 @@ def build_daybook(folder: Path) -> list:
     # so we subtract it (double negative = add) — take abs for clarity
     merged["net_profit"] = (
         merged["profit"]
-        - merged["sale_disc"]     # sale discount given to customer
-        - merged["credit_note"]   # sale CN (customer returns)
-        + merged["pur_discount"]  # purchase discount (negative = reduces cost = adds to profit)
-        + merged["debit_note"]    # purchase DN
+        - merged["sale_disc"]          # sale discount in bill
+        - merged["collection_discount"]# discount given at payment time
+        - merged["credit_note"]        # sale CN (customer returns)
+        + merged["pur_discount"]       # purchase discount (negative = adds to profit)
+        + merged["debit_note"]         # purchase DN
     ).round(2)
 
     # Rolling stock at cost (purchase gross = cost of goods in)
