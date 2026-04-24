@@ -514,6 +514,7 @@ const DB_COLS=[
     f:(v,r)=>`<span class="${cc(v)}" style="font-weight:600">${inr(v)}</span> <span style="font-size:9px;color:var(--t3)">${(+r.net_margin_pct||0).toFixed(1)}%</span>`},
   {k:'collection',  l:()=>'Collection',r:true,
     f:(v,r)=>`${inr(v)} <span style="font-size:9px;color:var(--t3)">${(+r.collection_pct||0).toFixed(1)}%</span>`},
+  {k:'collection_discount',l:()=>'Coll disc',r:true,f:v=>parseFloat(v)>0?`<span class="neg">${inr(v)}</span>`:'—'},
   {k:'cl_stock',    l:()=>'Cl stock',  r:true,f:v=>inr(v)},
   {k:'bills',       l:()=>'Bills',     r:true,f:v=>num(Math.round(v))},
 ];
