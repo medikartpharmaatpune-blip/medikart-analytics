@@ -656,6 +656,9 @@ function prodView(view, el){
   document.querySelectorAll('.bg .btn').forEach(b=>b.classList.remove('active'));
   el?.classList.add('active');
   prod_pg=0;
+  STATE._prodDisp=null;  // reset on tab switch
+  STATE._prodAll=null;
+  document.getElementById('prod-srch').value='';
   if(view==='top'){
     prod_data=d.top_products||[];
     prod_sk='sale_val'; prod_sd=-1;
