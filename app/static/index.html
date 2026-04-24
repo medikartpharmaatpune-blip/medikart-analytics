@@ -660,22 +660,22 @@ function prodView(view, el){
     prod_data=d.top_products||[];
     prod_sk='sale_val'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Top selling products';
-    prodRenderHead(['product','qty','sale_val','profit','margin_pct','cd_amt']);
+    prodRenderHead(['PROD_NAME','qty','sale_val','profit','margin_pct','cd_amt']);
   } else if(view==='slow'){
     prod_data=d.slow_moving||[];
     prod_sk='value'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Slow / non-moving stock';
-    prodRenderHead(['product','batch','qty','value','days_since_sale','last_sale']);
+    prodRenderHead(['PROD_NAME','batch','qty','value','days_since_sale','last_sale']);
   } else if(view==='expiry'){
     prod_data=d.near_expiry||[];
     prod_sk='days_to_expiry'; prod_sd=1;
     document.getElementById('prod-tbl-title').textContent='Near expiry batches (within 90 days)';
-    prodRenderHead(['product','batch','expiry','days_to_expiry','qty','mrp','value','godown']);
+    prodRenderHead(['PROD_NAME','batch','expiry','days_to_expiry','qty','mrp','value','godown']);
   } else if(view==='stock'){
     prod_data=d.stock_availability||[];
     prod_sk='value'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Stock availability';
-    prodRenderHead(['product','batch','expiry','qty','mrp','pur_rate','value','godown']);
+    prodRenderHead(['PROD_NAME','batch','expiry','qty','mrp','pur_rate','value','godown']);
   }
   prod_data.sort((a,b)=>a[prod_sk]>b[prod_sk]?prod_sd:a[prod_sk]<b[prod_sk]?-prod_sd:0);
   prodRenderTbl();
@@ -690,6 +690,7 @@ function prodSearch(q){
 }
 
 const PROD_COL_DEFS={
+  PROD_NAME:     {l:'Product',          r:false, f:v=>v},
   product:       {l:'Product',          r:false, f:v=>v},
   batch:         {l:'Batch',            r:false, f:v=>v},
   qty:           {l:'Qty',              r:true,  f:v=>num(Math.round(v))},
@@ -749,7 +750,7 @@ function prodRenderTbl(disp){
 
 function prodRenderChart(top){
   const top20=top.slice(0,20);
-  const labels=top20.map(r=>(r.product||'').substring(0,25));
+  const labels=top20.map(r=>(r.PROD_NAME||r.product||'').substring(0,25));
   const data=top20.map(r=>+((parseFloat(r.sale_val)||0)/1000).toFixed(1));
   const prof=top20.map(r=>+((parseFloat(r.profit)||0)/1000).toFixed(1));
   if(prod_chart)prod_chart.destroy();

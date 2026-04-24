@@ -196,8 +196,8 @@ def build_products(folder: Path) -> dict:
             pid = int(r.get("PRODID") or 0)
             return lkp.get(pno) or lkp.get(pid) or pno or "?"
 
-        sl["PROD_NAME"] = sl.apply(get_name, axis=1)
-        grp = sl.groupby("PROD_NAME").agg(
+        sl["product"] = sl.apply(get_name, axis=1)
+        grp = sl.groupby("product").agg(
             qty=("QTY","sum"), sale_val=("SALE_VAL","sum"),
             profit=("PRFT_AMT","sum"), cd_amt=("CDAMT","sum")
         ).reset_index()
@@ -224,9 +224,13 @@ def build_products(folder: Path) -> dict:
             # STOCK links via PROD_NO (PRODID is null in STOCK)
             pno = str(r.get("PROD_NO","")).strip().upper()
             pid = int(r.get("PRODID") or 0)
-            return lkp.get(pno) or lkp.get(pid) or pno or "?"
+            name = lkp.get(pno) or lkp.get(pid)
+            # If no name found, try stripping leading zeros from PROD_NO
+            if not name:
+                name = lkp.get(pno.lstrip("0"))
+            return name or pno or "?"
 
-        st["PROD_NAME"] = st.apply(get_prod_name, axis=1)
+        st["product"] = st.apply(get_prod_name, axis=1)
         st["cl_val"]    = (st["CL_STK"]*st["PUR_RATE"]).round(2)
         st["cl_val_mrp"]= (st["CL_STK"]*st["MRP"]).round(2)
 
@@ -238,10 +242,10 @@ def build_products(folder: Path) -> dict:
         near_expiry = near_expiry[near_expiry["days_to_expiry"]<=90].copy()
         near_expiry = near_expiry.sort_values("days_to_expiry")
         result["near_expiry"] = near_expiry[[
-            "PROD_NAME","BATCH","EXPIRY","days_to_expiry",
+            "product","BATCH","EXPIRY","days_to_expiry",
             "CL_STK","MRP","cl_val_mrp","GODCODE"
         ]].rename(columns={
-            "PROD_NAME":"product","BATCH":"batch","EXPIRY":"expiry",
+            "BATCH":"batch","EXPIRY":"expiry",
             "CL_STK":"qty","MRP":"mrp","cl_val_mrp":"value","GODCODE":"godown"
         }).head(200).to_dict(orient="records")
 
@@ -252,9 +256,9 @@ def build_products(folder: Path) -> dict:
         slow["days_since_sale"] = (today-slow["LSTSALE_DT"]).dt.days.fillna(9999).astype(int)
         slow = slow.sort_values("cl_val", ascending=False)
         result["slow_moving"] = slow[[
-            "PROD_NAME","BATCH","CL_STK","PUR_RATE","cl_val","days_since_sale","LSTSALE_DT"
+            "product","BATCH","CL_STK","PUR_RATE","cl_val","days_since_sale","LSTSALE_DT"
         ]].rename(columns={
-            "PROD_NAME":"product","BATCH":"batch","CL_STK":"qty",
+            "BATCH":"batch","CL_STK":"qty",
             "PUR_RATE":"pur_rate","cl_val":"value","LSTSALE_DT":"last_sale"
         }).head(200).to_dict(orient="records")
 
@@ -272,9 +276,9 @@ def build_products(folder: Path) -> dict:
 
         # Full stock list for availability lookup
         avail = st[st["CL_STK"]>0][[
-            "PROD_NAME","BATCH","EXPIRY","CL_STK","MRP","PUR_RATE","cl_val","GODCODE"
+            "product","BATCH","EXPIRY","CL_STK","MRP","PUR_RATE","cl_val","GODCODE"
         ]].rename(columns={
-            "PROD_NAME":"product","BATCH":"batch","EXPIRY":"expiry",
+            "BATCH":"batch","EXPIRY":"expiry",
             "CL_STK":"qty","MRP":"mrp","PUR_RATE":"pur_rate",
             "cl_val":"value","GODCODE":"godown"
         }).sort_values("product")
