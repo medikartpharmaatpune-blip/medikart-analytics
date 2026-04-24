@@ -660,22 +660,22 @@ function prodView(view, el){
     prod_data=d.top_products||[];
     prod_sk='sale_val'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Top selling products';
-    prodRenderHead(['PROD_NAME','qty','sale_val','profit','margin_pct','cd_amt']);
+    prodRenderHead(['product','qty','sale_val','profit','margin_pct','cd_amt']);
   } else if(view==='slow'){
     prod_data=d.slow_moving||[];
     prod_sk='value'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Slow / non-moving stock';
-    prodRenderHead(['PROD_NAME','batch','qty','value','days_since_sale','last_sale']);
+    prodRenderHead(['product','batch','qty','value','days_since_sale','last_sale']);
   } else if(view==='expiry'){
     prod_data=d.near_expiry||[];
     prod_sk='days_to_expiry'; prod_sd=1;
     document.getElementById('prod-tbl-title').textContent='Near expiry batches (within 90 days)';
-    prodRenderHead(['PROD_NAME','batch','expiry','days_to_expiry','qty','mrp','value','godown']);
+    prodRenderHead(['product','batch','expiry','days_to_expiry','qty','mrp','value','godown']);
   } else if(view==='stock'){
     prod_data=d.stock_availability||[];
     prod_sk='value'; prod_sd=-1;
     document.getElementById('prod-tbl-title').textContent='Stock availability';
-    prodRenderHead(['PROD_NAME','batch','expiry','qty','mrp','pur_rate','value','godown']);
+    prodRenderHead(['product','batch','expiry','qty','mrp','pur_rate','value','godown']);
   }
   prod_data.sort((a,b)=>a[prod_sk]>b[prod_sk]?prod_sd:a[prod_sk]<b[prod_sk]?-prod_sd:0);
   prodRenderTbl();
@@ -690,7 +690,6 @@ function prodSearch(q){
 }
 
 const PROD_COL_DEFS={
-  PROD_NAME:     {l:'Product',          r:false, f:v=>v},
   product:       {l:'Product',          r:false, f:v=>v},
   batch:         {l:'Batch',            r:false, f:v=>v},
   qty:           {l:'Qty',              r:true,  f:v=>num(Math.round(v))},
