@@ -156,14 +156,17 @@ def build_products(folder: Path) -> dict:
     lkp = {}
     if not product.empty:
         for _, r in product.iterrows():
-            name = str(r.get("PROD_NAME") or r.get("PRODNM") or "").strip()
+            # Prefer PRODNM (longer, actual product name) over PROD_NAME
+            name = str(r.get("PRODNM") or r.get("PROD_NAME") or "").strip()
             if not name: continue
+            # Index by PROD_NO (primary key used in STOCK and TR_MONTHLY)
+            pno = str(r.get("PROD_NO") or "").strip().upper()
+            if pno: lkp[pno] = name
+            # Also index by PRODID as fallback
             try:
                 pid = int(r.get("PRODID") or 0)
                 if pid: lkp[pid] = name
             except: pass
-            pno = str(r.get("PROD_NO") or "").strip().upper()
-            if pno: lkp[pno] = name
 
     # Company lookup
     company = load_table(folder, "COMPANY")
@@ -188,9 +191,10 @@ def build_products(folder: Path) -> dict:
         sl["PROD_NO"]  = col(sl,"PROD_NO","").astype(str).str.strip().str.upper()
 
         def get_name(r):
-            pid = int(r.get("PRODID",0) or 0)
-            return lkp.get(pid, lkp.get(str(r.get("PROD_NO","")).strip().upper(),
-                           str(r.get("PROD_NO","?"))[:30]))
+            # TR_MONTHLY links via PROD_NO (string key)
+            pno = str(r.get("PROD_NO","")).strip().upper()
+            pid = int(r.get("PRODID") or 0)
+            return lkp.get(pno) or lkp.get(pid) or pno or "?"
 
         sl["PROD_NAME"] = sl.apply(get_name, axis=1)
         grp = sl.groupby("PROD_NAME").agg(
@@ -217,9 +221,10 @@ def build_products(folder: Path) -> dict:
         st["LSTSALE_DT"]= d(col(st,"LSTSALE_DT"))
 
         def get_prod_name(r):
-            pid = int(r.get("PRODID",0) or 0)
-            return lkp.get(pid, lkp.get(str(r.get("PROD_NO","")).strip().upper(),
-                           str(r.get("PROD_NO","?"))[:30]))
+            # STOCK links via PROD_NO (PRODID is null in STOCK)
+            pno = str(r.get("PROD_NO","")).strip().upper()
+            pid = int(r.get("PRODID") or 0)
+            return lkp.get(pno) or lkp.get(pid) or pno or "?"
 
         st["PROD_NAME"] = st.apply(get_prod_name, axis=1)
         st["cl_val"]    = (st["CL_STK"]*st["PUR_RATE"]).round(2)
