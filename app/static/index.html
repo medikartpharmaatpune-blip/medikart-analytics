@@ -427,6 +427,7 @@ function dbRun(){
   db_filt=dbAgg(rows,GKEY[STATE.grain]);
   db_filt.sort((a,b)=>a.date>b.date?1:-1);
   STATE.pg=0;
+  STATE._dbDisp=null;  // reset on every run so table uses fresh db_filt
   dbRenderKPIs(); dbRenderChart(); dbRenderHead(); dbRenderTbl();
 }
 
