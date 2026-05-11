@@ -6,7 +6,7 @@ Corrected data sources (verified against real Carew data Apr-2026):
   Sale        TRCSHR.VOU_DT + BILL_AMT
               (TR* archives used only for PRFT_AMT — not for sale total)
 
-  Purchase    PURCHTRAN only (NOT CNGPURCHTRAN — that is archive/history)
+  Purchase    PURCHTRAN only (verified: matches Carew day book Apr-06)
               Gross  = QTY × PR_TRATE   (verified: matches Carew Gross Amt)
               GST    = SGSTAMT + CGSTAMT + IGSTAMT
               Net    = Gross + GST       (matches Carew Net Amount)
@@ -194,17 +194,44 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
     return result[["date","sale","sale_gst","sale_disc","profit","bills","sale_qty"]].fillna(0)
 
 
-def daily_purchase(purch: pd.DataFrame) -> pd.DataFrame:
+def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
+                   cng_purch: pd.DataFrame = None) -> pd.DataFrame:
     """
-    PURCHTRAN only — CNGPURCHTRAN is history/archive, inflates totals.
-    Verified formula (all 7 bills on Apr-18 match exactly):
-      Gross = QTY × PR_TRATE
-      GST   = SGSTAMT + CGSTAMT + IGSTAMT
-      Net   = Gross + GST
-    """
-    if purch.empty:
-        return pd.DataFrame()
+    Purchase totals from PURCHMAST.AMT_NET — exact match to Carew day book.
+    (Verified: PURCHMAST.AMT_NET annual total = 133,424,871.25 = Carew exactly)
 
+    PURCHMAST = bill header with final net amount per bill.
+    PURCHTRAN = line items used for GST breakdown and discount details.
+    """
+    # ── Primary: PURCHMAST.AMT_NET (exact Carew match) ───────────────────
+    if purchmast is not None and not purchmast.empty and "AMT_NET" in purchmast.columns:
+        pm = purchmast.copy()
+        pm["_dt"]      = d(col(pm, "BILL_DT"))
+        pm["AMT_NET"]  = n(col(pm, "AMT_NET"))
+        pm["GROS_AMT"] = n(col(pm, "GROS_AMT"))
+        pm["DISC_AMT"] = n(col(pm, "DISC_AMT"))
+        pm["TOT_SCM"]  = n(col(pm, "TOT_SCM"))
+        # GST from PURCHMAST header fields
+        pm["GST"] = (n(col(pm,"SGSTAMT1")) + n(col(pm,"SGSTAMT2")) + n(col(pm,"SGSTAMT3")) +
+                     n(col(pm,"CGSTAMT1")) + n(col(pm,"CGSTAMT2")) + n(col(pm,"CGSTAMT3")) +
+                     n(col(pm,"IGSTAMT1")) + n(col(pm,"IGSTAMT2")) + n(col(pm,"IGSTAMT3")))
+        pm = pm[pm["_dt"].notna()]
+
+        g = (pm.groupby(pm["_dt"].dt.date)
+               .agg(purchase     =("AMT_NET",  "sum"),
+                    pur_gross    =("GROS_AMT", "sum"),
+                    pur_gst      =("GST",      "sum"),
+                    pur_item_disc=("DISC_AMT", "sum"),
+                    pur_scm_amt  =("TOT_SCM",  "sum"),
+                    pur_bills    =("BILL_NO",  "nunique"))
+               .reset_index().rename(columns={"_dt": "date"}))
+        g["pur_discount"] = -(g["pur_item_disc"] + g["pur_scm_amt"])  # negative = discount received
+        g["date"] = pd.to_datetime(g["date"])
+        return g
+
+    # ── Fallback: PURCHTRAN line items ────────────────────────────────────
+    if purch is None or purch.empty:
+        return pd.DataFrame()
     df = purch.copy()
     df["_dt"]      = d(col(df, "BILL_DT"))
     df["QTY"]      = n(col(df, "QTY"))
@@ -217,8 +244,6 @@ def daily_purchase(purch: pd.DataFrame) -> pd.DataFrame:
     df["GROSS"]    = df["QTY"] * df["PR_TRATE"]
     df["GST"]      = df["SGSTAMT"] + df["CGSTAMT"] + df["IGSTAMT"]
     df["NET"]      = df["GROSS"] + df["GST"]
-    # DISC_AMT = item disc (negative = discount received, keep sign)
-    # SCM_AMT  = scheme / free goods value (positive)
     df = df[df["_dt"].notna()]
 
     g = (df.groupby(df["_dt"].dt.date)
@@ -328,9 +353,10 @@ def build_daybook(folder: Path) -> list:
     print(f"Folder : {folder}")
     print(f"{'─'*60}\n")
 
-    trcshr     = load_table(folder, "TRCSHR")   # receipts/collection
-    purch      = load_table(folder, "PURCHTRAN")  # current purchase lines
-    # CNGPURCHTRAN intentionally not loaded — archive/history, inflates totals
+    trcshr     = load_table(folder, "TRCSHR")        # receipts/collection
+    purch      = load_table(folder, "PURCHTRAN")      # purchase line items
+    purchmast  = load_table(folder, "PURCHMAST")      # purchase bill headers — AMT_NET = exact Carew total
+    # CNGPURCHTRAN = challan/GRN entries — same bills at different stage, excluded
     # STATMENT intentionally not loaded — TRCSHR is the collection source
     crdb       = load_table(folder, "CRDBTR")
     allsale    = load_table(folder, "ALLSALE")    # sale bills — CR_AMT = CN adjusted in bill
@@ -339,7 +365,7 @@ def build_daybook(folder: Path) -> list:
 
     print("\n  Building daily series...")
     ds  = daily_sales(trcshr, sale_lines)     # sale from TR*, collection from TRCSHR
-    dp  = daily_purchase(purch)
+    dp  = daily_purchase(purch, purchmast)    # PURCHMAST.AMT_NET = exact Carew total
     dc  = daily_collection(trcshr)            # TRCSHR = receipts
     dn  = daily_crdb_notes(allsale, crdb)
     stk = stock_snapshot(stock)
