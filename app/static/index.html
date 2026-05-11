@@ -330,11 +330,16 @@ function renderDaybook() {
   const raw = STATE.data.daybook || [];
   const content = document.getElementById('content');
 
-  // date range defaults
+  // date range defaults — use actual data range
   const dates = raw.map(r=>r.date).sort();
   const today = new Date().toISOString().substring(0,10);
-  const from90= new Date(Date.now()-90*86400000).toISOString().substring(0,10);
-  const defFrom = dates.length ? (dates[0]>from90?dates[0]:from90) : from90;
+  const from90 = new Date(Date.now()-90*86400000).toISOString().substring(0,10);
+  const dataEnd   = dates.length ? dates[dates.length-1] : today;
+  const dataStart = dates.length ? dates[0] : from90;
+  // If data is older than 90 days, show all; otherwise show last 90 days
+  const defFrom = dataEnd < from90 ? dataStart : (dataStart>from90 ? dataStart : from90);
+  const defTo   = dataEnd < today ? dataEnd : today;
+  const defQr   = dataEnd < from90 ? 'all' : '90';
 
   content.innerHTML = `
   <div class="fbar">
@@ -347,15 +352,15 @@ function renderDaybook() {
       <button class="btn" onclick="dbGrain('year',this)">Year</button>
     </div>
     <span class="fl">From</span><input type="date" id="db-from" value="${defFrom}" onchange="dbRun()">
-    <span class="fl">To</span><input type="date" id="db-to" value="${today}" onchange="dbRun()">
+    <span class="fl">To</span><input type="date" id="db-to" value="${defTo}" onchange="dbRun()">
     <select id="db-qr" onchange="dbQuick(this.value)">
-      <option value="90" selected>Last 90 days</option>
+      <option value="90" ${defQr==='90'?'selected':''}>Last 90 days</option>
       <option value="30">Last 30 days</option>
       <option value="7">Last 7 days</option>
       <option value="fy">This FY</option>
       <option value="cm">This month</option>
       <option value="lm">Last month</option>
-      <option value="all">All data</option>
+      <option value="all" ${defQr==='all'?'selected':''}>All data</option>
     </select>
     <select id="db-chart" onchange="dbRenderChart()">
       <option value="all">Sale + Purchase + Profit</option>
