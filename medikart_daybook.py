@@ -64,19 +64,30 @@ def load_monthly_sales(folder: Path) -> pd.DataFrame:
     """TR* archives (TRAPR26 etc.) — used only for PRFT_AMT, not sale total."""
     pat = re.compile(r'^TR(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2}$', re.I)
     frames = []
-    for f in sorted(folder.iterdir()):
+    names  = []
+    for f in sorted(folder.iterdir(), key=lambda x: x.name.upper()):
         if f.is_file() and f.suffix.lower() == ".dbf" and pat.match(f.stem.upper()):
-            try:
-                recs = list(DBF(str(f), load=True, encoding="utf-8",
-                                ignore_missing_memofile=True))
-                if recs:
-                    frames.append(pd.DataFrame(recs))
-            except Exception:
-                pass
+            loaded = False
+            for enc in ["utf-8", "latin-1"]:
+                for raw in [False, True]:
+                    try:
+                        recs = list(DBF(str(f), load=True, encoding=enc,
+                                        ignore_missing_memofile=True, raw=raw))
+                        if recs:
+                            frames.append(pd.DataFrame(recs))
+                            names.append(f.stem.upper())
+                        loaded = True
+                        break
+                    except Exception:
+                        pass
+                if loaded:
+                    break
+            if not loaded:
+                print(f"  [WARN] Could not load {f.name}")
     if not frames:
         return pd.DataFrame()
     combined = pd.concat(frames, ignore_index=True)
-    print(f"  Loaded  TR_MONTHLY         {len(combined):>8,} rows  ({len(frames)} files)")
+    print(f"  Loaded  TR_MONTHLY         {len(combined):>8,} rows  ({', '.join(names)})")
     return combined
 
 
@@ -89,12 +100,28 @@ def col(df: pd.DataFrame, name: str, default=0) -> pd.Series:
 def n(s) -> pd.Series:
     if isinstance(s, (int, float)):
         return pd.Series([s], dtype=float)
+    # Handle raw bytes from dbfread raw=True mode
+    if hasattr(s, 'apply'):
+        def parse_num(v):
+            if isinstance(v, (bytes, bytearray)):
+                try: return float(v.decode("utf-8").strip() or 0)
+                except: return 0.0
+            return v
+        s = s.apply(parse_num)
     return pd.to_numeric(s, errors="coerce").fillna(0)
 
 
 def d(s) -> pd.Series:
     if isinstance(s, (int, float, type(None))):
         return pd.Series([pd.NaT])
+    # Handle raw bytes from dbfread raw=True mode (e.g. b'20250301')
+    if hasattr(s, 'apply'):
+        def parse_val(v):
+            if isinstance(v, (bytes, bytearray)):
+                try: return pd.Timestamp(v.decode("utf-8").strip())
+                except: return pd.NaT
+            return v
+        s = s.apply(parse_val)
     return pd.to_datetime(s, errors="coerce")
 
 
