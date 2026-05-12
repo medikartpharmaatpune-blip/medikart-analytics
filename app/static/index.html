@@ -320,7 +320,7 @@ function dbAgg(rows,gk){
     x.cl_stock=r.cl_stock; x._rows.push(r);
   });
   return Object.values(m).map(x=>({...x,
-    margin_pct:    x.net_sale?x.gross_profit/x.net_sale*100:0,
+    margin_pct:    x.sale?x.gross_profit/x.sale*100:0,
     net_margin_pct:x.sale?x.net_profit/x.sale*100:0,
     collection_pct:x.sale?x.collection/x.sale*100:0,
   }));
@@ -460,7 +460,7 @@ function dbRenderKPIs(){
     {l:'Collection',   v:inr(t.collection),   s:pct(t.collection,t.sale)+' of sales'},
     {l:'Sale disc',    v:inr(t.sale_disc),    s:'CD + scheme'},
     {l:'Coll disc',    v:inr(t.collection_discount||0), s:'Bulk payment disc',c:'neg'},
-    {l:'Pur disc',     v:inr(t.pur_discount||0), s:'Item + scheme'},
+    {l:'Pur disc',     v:inr(t.pur_discount||0), s:'Item + scheme',c:'pos'},
     {l:'Closing stock',v:inr(cl),             s:'Opening '+inr(op)},
   ];
   document.getElementById('db-kpis').innerHTML=kpis.map(k=>
