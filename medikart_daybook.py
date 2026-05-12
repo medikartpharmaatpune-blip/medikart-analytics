@@ -252,7 +252,7 @@ def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
                     pur_scm_amt  =("TOT_SCM",  "sum"),
                     pur_bills    =("BILL_NO",  "nunique"))
                .reset_index().rename(columns={"_dt": "date"}))
-        g["pur_discount"] = -(g["pur_item_disc"] + g["pur_scm_amt"])  # negative = discount received
+        g["pur_discount"] = g["pur_item_disc"] + g["pur_scm_amt"]  # stored as-is from DB
         g["date"] = pd.to_datetime(g["date"])
         return g
 
@@ -417,17 +417,36 @@ def build_daybook(folder: Path) -> list:
         if c not in merged.columns: merged[c] = 0.0
         merged[c] = n(merged[c])
 
-    merged["gross_profit"] = merged["profit"].round(2)
-    # Net Profit = Gross Profit - Sale Disc - Sale CN + Pur Disc + Pur DN
-    # pur_discount is negative (DISC_AMT stored negative) + SCM_AMT positive
-    # so we subtract it (double negative = add) — take abs for clarity
-    merged["net_profit"] = (
-        merged["profit"]
-        - merged["sale_disc"]          # sale discount in bill
-        - merged["collection_discount"]# discount given at payment time
-        - merged["credit_note"]        # sale CN (customer returns)
-        + merged["pur_discount"]       # purchase discount (negative = adds to profit)
-        + merged["debit_note"]         # purchase DN
+    # ── Trading Account ──────────────────────────────────────────────────
+    # Net Sale     = Gross Sale - Sale Disc - Collection Disc
+    # Net Purchase = Gross Purchase - Pur Disc  (pur_discount is negative = reduces cost)
+    # Gross Profit = Net Sale - Net Purchase
+    # ── P&L Account ──────────────────────────────────────────────────────
+    # Net Profit   = Gross Profit - Sale CN + Pur DN - Expenses - Tax
+    #                (Expenses = 0 for now, bank statement to be added later)
+
+    merged["net_sale"]     = (
+        merged["sale"]
+        - merged["sale_disc"]           # cash disc + scheme disc in bill
+        - merged["collection_discount"] # bulk payment discount
+    ).round(2)
+
+    merged["net_purchase"] = (
+        merged["purchase"]              # PURCHMAST.AMT_NET (already includes GST)
+        - merged["pur_discount"]        # as-is from DB (positive=reduces cost, negative=increases)
+    ).round(2)
+
+    merged["gross_profit"] = (merged["net_sale"] - merged["net_purchase"]).round(2)
+
+    merged["expenses"]     = 0.0       # placeholder — bank statement to be added
+    merged["tax"]          = 0.0       # placeholder
+
+    merged["net_profit"]   = (
+        merged["gross_profit"]
+        - merged["credit_note"]         # sale CN (customer returns)
+        + merged["debit_note"]          # purchase DN (supplier returns)
+        - merged["expenses"]
+        - merged["tax"]
     ).round(2)
 
     # Rolling stock at cost (purchase gross = cost of goods in)
@@ -452,15 +471,15 @@ def build_daybook(folder: Path) -> list:
                         + "-" + merged["date"].dt.year.astype(str)
     merged["year"]    = merged["date"].dt.year.astype(str)
 
-    merged["margin_pct"]     = (merged["profit"] /
-        merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
+    merged["margin_pct"]     = (merged["gross_profit"] /
+        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["net_margin_pct"] = (merged["net_profit"] /
-        merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
+        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["collection_pct"] = (merged["collection"] /
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
-    for c in ["sale","purchase","pur_gross","pur_gst","collection",
-              "credit_note","debit_note","profit","gross_profit","net_profit",
+    for c in ["sale","net_sale","purchase","net_purchase","pur_gross","pur_gst","collection",
+              "credit_note","debit_note","gross_profit","net_profit","expenses","tax",
               "op_stock","cl_stock"]:
         if c in merged.columns: merged[c] = merged[c].round(2)
 
@@ -471,13 +490,17 @@ def build_daybook(folder: Path) -> list:
     print(f"\n  Days        : {len(rows):,}")
     if rows:
         print(f"  Range       : {rows[0]['date']} \u2192 {rows[-1]['date']}")
-    print(f"  Sale        : {inr(tot('sale'))}")
-    print(f"  Purchase    : {inr(tot('purchase'))}  "
-          f"(gross {inr(tot('pur_gross'))} + GST {inr(tot('pur_gst'))})")
-    print(f"  Profit      : {inr(tot('profit'))}")
+    print(f"  Gross Sale  : {inr(tot('sale'))}")
+    print(f"  Sale Disc   : {inr(tot('sale_disc'))}  (CD + scheme + coll disc)")
+    print(f"  Net Sale    : {inr(tot('net_sale'))}")
+    print(f"  Gross Pur   : {inr(tot('purchase'))}")
+    print(f"  Pur Disc    : {inr(tot('pur_discount'))}  (item + scheme)")
+    print(f"  Net Purchase: {inr(tot('net_purchase'))}")
+    print(f"  Gross Profit: {inr(tot('gross_profit'))}")
+    print(f"  Sale CN     : {inr(tot('credit_note'))}")
+    print(f"  Pur DN      : {inr(tot('debit_note'))}")
+    print(f"  Net Profit  : {inr(tot('net_profit'))}")
     print(f"  Collection  : {inr(tot('collection'))}")
-    print(f"  Credit notes: {inr(tot('credit_note'))}")
-    print(f"  Debit notes : {inr(tot('debit_note'))}")
     print(f"  Op stock    : {inr(stk['op_stock'])}")
     print(f"  Cl stock    : {inr(stk['cl_stock'])}")
     return rows
