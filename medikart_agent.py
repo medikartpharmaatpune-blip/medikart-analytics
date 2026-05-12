@@ -156,17 +156,27 @@ def build_products(folder: Path) -> dict:
     lkp = {}
     if not product.empty:
         for _, r in product.iterrows():
-            # Prefer PRODNM (longer, actual product name) over PROD_NAME
             name = str(r.get("PRODNM") or r.get("PROD_NAME") or "").strip()
             if not name: continue
-            # Index by PROD_NO (primary key used in STOCK and TR_MONTHLY)
-            pno = str(r.get("PROD_NO") or "").strip().upper()
-            if pno: lkp[pno] = name
-            # Also index by PRODID as fallback
+            # PROD_NO has leading spaces — strip and store both padded and unpadded
+            pno_raw = str(r.get("PROD_NO") or "")
+            pno     = pno_raw.strip().upper()
+            if pno:
+                lkp[pno]     = name   # stripped
+                lkp[pno_raw.upper()] = name  # original with spaces
             try:
                 pid = int(r.get("PRODID") or 0)
                 if pid: lkp[pid] = name
             except: pass
+
+    # Also build lookup from TR_MONTHLY sale lines (catches products not in PRODUCT table)
+    tr_monthly = load_monthly(folder)
+    if not tr_monthly.empty and "PROD_NAME" in tr_monthly.columns:
+        for _, r in tr_monthly.drop_duplicates("PROD_NO").iterrows():
+            name = str(r.get("PROD_NAME") or r.get("PRODNM") or "").strip()
+            pno  = str(r.get("PROD_NO") or "").strip().upper()
+            if name and pno and pno not in lkp:
+                lkp[pno] = name
 
     # Company lookup
     company = load_table(folder, "COMPANY")
@@ -221,13 +231,12 @@ def build_products(folder: Path) -> dict:
         st["LSTSALE_DT"]= d(col(st,"LSTSALE_DT"))
 
         def get_prod_name(r):
-            # STOCK links via PROD_NO (PRODID is null in STOCK)
+            # STOCK.PRODID is always None — use PROD_NO only
             pno = str(r.get("PROD_NO","")).strip().upper()
-            pid = int(r.get("PRODID") or 0)
-            name = lkp.get(pno) or lkp.get(pid)
-            # If no name found, try stripping leading zeros from PROD_NO
-            if not name:
-                name = lkp.get(pno.lstrip("0"))
+            # Try exact match, then numeric (strip leading zeros)
+            name = (lkp.get(pno) or
+                    lkp.get(pno.lstrip("0")) or
+                    lkp.get(int(pno) if pno.isdigit() else 0))
             return name or pno or "?"
 
         st["product"] = st.apply(get_prod_name, axis=1)

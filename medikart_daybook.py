@@ -417,30 +417,31 @@ def build_daybook(folder: Path) -> list:
         if c not in merged.columns: merged[c] = 0.0
         merged[c] = n(merged[c])
 
-    # ── Trading Account ──────────────────────────────────────────────────
-    # Net Sale     = Gross Sale - Sale Disc - Collection Disc
-    # Net Purchase = Gross Purchase - Pur Disc  (pur_discount is negative = reduces cost)
-    # Gross Profit = Net Sale - Net Purchase
-    # ── P&L Account ──────────────────────────────────────────────────────
-    # Net Profit   = Gross Profit - Sale CN + Pur DN - Expenses - Tax
-    #                (Expenses = 0 for now, bank statement to be added later)
+    # ── Gross Profit = PRFT_AMT from TR sale lines ───────────────────────
+    # PRFT_AMT is the actual margin per sale line (sale price minus purchase
+    # cost of that specific batch) — most accurate for daily tracking.
+    # Full trading account (Net Sale - COGS) is better at monthly level
+    # where stock figures are reliable.
 
+    merged["gross_profit"] = merged["profit"].round(2)
+
+    # Net Sale = Gross Sale - Sale Disc - Collection Disc (for reference)
     merged["net_sale"]     = (
         merged["sale"]
-        - merged["sale_disc"]           # cash disc + scheme disc in bill
-        - merged["collection_discount"] # bulk payment discount
+        - merged["sale_disc"]
+        - merged["collection_discount"]
     ).round(2)
 
+    # Net Purchase = Purchase - Pur Disc (for reference)
     merged["net_purchase"] = (
-        merged["purchase"]              # PURCHMAST.AMT_NET (already includes GST)
-        - merged["pur_discount"]        # as-is from DB (positive=reduces cost, negative=increases)
+        merged["purchase"]
+        - merged["pur_discount"]
     ).round(2)
 
-    merged["gross_profit"] = (merged["net_sale"] - merged["net_purchase"]).round(2)
+    merged["expenses"]     = 0.0   # placeholder — bank statement to be added
+    merged["tax"]          = 0.0   # placeholder
 
-    merged["expenses"]     = 0.0       # placeholder — bank statement to be added
-    merged["tax"]          = 0.0       # placeholder
-
+    # Net Profit = Gross Profit - Sale CN + Pur DN - Expenses - Tax
     merged["net_profit"]   = (
         merged["gross_profit"]
         - merged["credit_note"]         # sale CN (customer returns)
@@ -472,9 +473,9 @@ def build_daybook(folder: Path) -> list:
     merged["year"]    = merged["date"].dt.year.astype(str)
 
     merged["margin_pct"]     = (merged["gross_profit"] /
-        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
+        merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["net_margin_pct"] = (merged["net_profit"] /
-        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
+        merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["collection_pct"] = (merged["collection"] /
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
