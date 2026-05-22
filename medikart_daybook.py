@@ -244,12 +244,15 @@ def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
                      n(col(pm,"IGSTAMT1")) + n(col(pm,"IGSTAMT2")) + n(col(pm,"IGSTAMT3")))
         pm = pm[pm["_dt"].notna()]
 
+        pm["DR_AMT"]   = n(col(pm, "DR_AMT"))   # purchase DN adjusted in bill
+
         g = (pm.groupby(pm["_dt"].dt.date)
                .agg(purchase     =("AMT_NET",  "sum"),
                     pur_gross    =("GROS_AMT", "sum"),
                     pur_gst      =("GST",      "sum"),
                     pur_item_disc=("DISC_AMT", "sum"),
                     pur_scm_amt  =("TOT_SCM",  "sum"),
+                    debit_note   =("DR_AMT",   "sum"),  # Pur DN adjusted in bill
                     pur_bills    =("BILL_NO",  "nunique"))
                .reset_index().rename(columns={"_dt": "date"}))
         g["pur_discount"] = g["pur_item_disc"] + g["pur_scm_amt"]  # stored as-is from DB
@@ -438,6 +441,13 @@ def build_daybook(folder: Path) -> list:
         - merged["pur_discount"]
     ).round(2)
 
+    # COGS = Opening Stock + Net Purchase - Closing Stock
+    merged["cogs"] = (
+        merged["op_stock"]
+        + merged["net_purchase"]
+        - merged["cl_stock"]
+    ).round(2)
+
     merged["expenses"]     = 0.0   # placeholder — bank statement to be added
     merged["tax"]          = 0.0   # placeholder
 
@@ -480,7 +490,7 @@ def build_daybook(folder: Path) -> list:
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
     for c in ["sale","net_sale","purchase","net_purchase","pur_gross","pur_gst","collection",
-              "credit_note","debit_note","gross_profit","net_profit","expenses","tax",
+              "credit_note","debit_note","cogs","gross_profit","net_profit","expenses","tax",
               "op_stock","cl_stock"]:
         if c in merged.columns: merged[c] = merged[c].round(2)
 
