@@ -134,7 +134,12 @@ def inr(v):
 
 def ser(o):
     if hasattr(o, "isoformat"): return o.isoformat()
-    if hasattr(o, "item"):      return o.item()
+    if hasattr(o, "item"):
+        v = o.item()
+        if v != v: return 0  # NaN check
+        return v
+    import math
+    if isinstance(o, float) and math.isnan(o): return 0
     return str(o)
 
 
@@ -346,7 +351,7 @@ def daily_crdb_notes(allsale: pd.DataFrame, crdb: pd.DataFrame) -> pd.DataFrame:
     if result.empty:
         return pd.DataFrame()
 
-    for c in ["credit_note", "debit_note"]:
+    for c in ["credit_note"]:
         if c not in result.columns:
             result[c] = 0.0
     result["date"] = pd.to_datetime(result["date"])
@@ -426,39 +431,35 @@ def build_daybook(folder: Path) -> list:
     # Full trading account (Net Sale - COGS) is better at monthly level
     # where stock figures are reliable.
 
-    merged["gross_profit"] = merged["profit"].round(2)
+    # Gross Profit 1 = PRFT_AMT from TR sale lines (batch level margin)
+    merged["gross_profit"]  = merged["profit"].round(2)
 
-    # Net Sale = Gross Sale - Sale Disc - Collection Disc (for reference)
-    merged["net_sale"]     = (
+    # Net Sale = Gross Sale - Sale Disc - Collection Disc
+    merged["net_sale"]      = (
         merged["sale"]
         - merged["sale_disc"]
         - merged["collection_discount"]
     ).round(2)
 
-    # Net Purchase = Purchase - Pur Disc (for reference)
-    merged["net_purchase"] = (
+    # Net Purchase = Purchase - Pur Disc
+    merged["net_purchase"]  = (
         merged["purchase"]
         - merged["pur_discount"]
     ).round(2)
 
-    # COGS = Opening Stock + Net Purchase - Closing Stock
-    merged["cogs"] = (
-        merged["op_stock"]
-        + merged["net_purchase"]
-        - merged["cl_stock"]
-    ).round(2)
+    # Expenses and Tax placeholders (bank statement to be added)
+    merged["expenses"]      = 0.0
+    merged["tax"]           = 0.0
 
-    merged["expenses"]     = 0.0   # placeholder — bank statement to be added
-    merged["tax"]          = 0.0   # placeholder
-
-    # Net Profit = Gross Profit - Sale CN + Pur DN - Expenses - Tax
-    merged["net_profit"]   = (
+    # Net Profit = Gross Profit 1 - Expenses - Tax
+    # (Sale CN and Pur DN shown separately — not mixed into profit)
+    merged["net_profit"]    = (
         merged["gross_profit"]
-        - merged["credit_note"]         # sale CN (customer returns)
-        + merged["debit_note"]          # purchase DN (supplier returns)
         - merged["expenses"]
         - merged["tax"]
     ).round(2)
+
+    # Gross Profit 2 = Net Sale - COGS (trading account — calculated after stock assigned below)
 
     # Rolling stock at cost (purchase gross = cost of goods in)
     running = stk["op_stock"]
@@ -472,6 +473,16 @@ def build_daybook(folder: Path) -> list:
     merged["op_stock"] = op_vals
     merged["cl_stock"] = cl_vals
 
+    # COGS = Opening Stock + Net Purchase - Closing Stock
+    merged["cogs"] = (
+        merged["op_stock"]
+        + merged["net_purchase"]
+        - merged["cl_stock"]
+    ).round(2)
+
+    # Gross Profit 2 = Net Sale - COGS (trading account formula)
+    merged["gross_profit2"] = (merged["net_sale"] - merged["cogs"]).round(2)
+
     # Calendar columns
     merged["dow"]     = merged["date"].dt.strftime("%a")
     merged["week"]    = "W" + merged["date"].dt.isocalendar().week \
@@ -482,6 +493,8 @@ def build_daybook(folder: Path) -> list:
                         + "-" + merged["date"].dt.year.astype(str)
     merged["year"]    = merged["date"].dt.year.astype(str)
 
+    merged["gp2_margin_pct"] = (merged["gross_profit2"] /
+        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["margin_pct"]     = (merged["gross_profit"] /
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["net_margin_pct"] = (merged["net_profit"] /
@@ -490,7 +503,7 @@ def build_daybook(folder: Path) -> list:
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
     for c in ["sale","net_sale","purchase","net_purchase","pur_gross","pur_gst","collection",
-              "credit_note","debit_note","cogs","gross_profit","net_profit","expenses","tax",
+              "credit_note","debit_note","cogs","gross_profit","gross_profit2","net_profit","expenses","tax",
               "op_stock","cl_stock"]:
         if c in merged.columns: merged[c] = merged[c].round(2)
 
@@ -1129,6 +1142,12 @@ def run(folder_arg: str):
         return
 
     json_path = folder / "medikart_daybook.json"
+    # Replace NaN/inf with 0 before serialising
+    import math
+    def clean(v):
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)): return 0
+        return v
+    rows = [{k: clean(v) for k, v in r.items()} for r in rows]
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(rows, f, indent=2, default=ser)
     print(f"\n  JSON  : {json_path}  ({json_path.stat().st_size//1024} KB)")
