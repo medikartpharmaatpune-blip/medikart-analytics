@@ -434,8 +434,13 @@ def build_daybook(folder: Path) -> list:
     # Full trading account (Net Sale - COGS) is better at monthly level
     # where stock figures are reliable.
 
-    # Gross Profit 1 = PRFT_AMT from TR sale lines (batch level margin)
-    merged["gross_profit"]  = merged["profit"].round(2)
+    # Gross Profit 1 = PRFT_AMT - Sale Disc - Collection Disc
+    # PRFT_AMT is profit before discounts, so deduct all sale discounts
+    merged["gross_profit"] = (
+        merged["profit"]
+        - merged["sale_disc"]
+        - merged["collection_discount"]
+    ).round(2)
 
     # Net Sale = Gross Sale - Sale Disc - Collection Disc
     merged["net_sale"]      = (
@@ -496,7 +501,7 @@ def build_daybook(folder: Path) -> list:
     merged["gp2_margin_pct"] = (merged["gross_profit2"] /
         merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["margin_pct"]     = (merged["gross_profit"] /
-        merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
+        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["net_margin_pct"] = (merged["net_profit"] /
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["collection_pct"] = (merged["collection"] /
