@@ -100,11 +100,13 @@ def col(df: pd.DataFrame, name: str, default=0) -> pd.Series:
 def n(s) -> pd.Series:
     if isinstance(s, (int, float)):
         return pd.Series([s], dtype=float)
-    # Handle raw bytes from dbfread raw=True mode
+    # Handle raw bytes from dbfread raw=True mode (including null bytes)
     if hasattr(s, 'apply'):
         def parse_num(v):
             if isinstance(v, (bytes, bytearray)):
-                try: return float(v.decode("utf-8").strip() or 0)
+                try:
+                    decoded = v.decode("utf-8", "ignore").strip().strip("\x00").strip()
+                    return float(decoded) if decoded else 0.0
                 except: return 0.0
             return v
         s = s.apply(parse_num)
@@ -118,7 +120,9 @@ def d(s) -> pd.Series:
     if hasattr(s, 'apply'):
         def parse_val(v):
             if isinstance(v, (bytes, bytearray)):
-                try: return pd.Timestamp(v.decode("utf-8").strip())
+                try:
+                    decoded = v.decode("utf-8", "ignore").strip().strip("\x00").strip()
+                    return pd.Timestamp(decoded) if decoded else pd.NaT
                 except: return pd.NaT
             return v
         s = s.apply(parse_val)
@@ -170,7 +174,8 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         sl["_dt"]      = d(col(sl, "TR_DATE"))
         sl["QTY"]      = n(col(sl, "QTY"))
         sl["RATE"]     = n(col(sl, "RATE"))
-        sl["PUR_RATE"] = n(col(sl, "T_RATE"))   # T_RATE = taxable purchase rate (closest to COGS)
+        sl["PUR_RATE"] = n(col(sl, "T_RATE"))   # T_RATE = taxable purchase rate
+        sl["DISC_SCM"] = n(col(sl, "DISC_SCM"))  # scheme discount value (for COGS)
         sl["PRFT_AMT"] = n(col(sl, "PRFT_AMT"))
         sl["SGSTAMT"]  = n(col(sl, "SGSTAMT"))
         sl["CGSTAMT"]  = n(col(sl, "CGSTAMT"))
@@ -180,9 +185,9 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         sl["CDAMT"]    = n(col(sl, "CDAMT"))     # cash discount given to customer
         sl["DISC_SCM"] = n(col(sl, "DISC_SCM"))  # scheme discount
         sl["SALE"]     = sl["QTY"] * sl["RATE"]
-        sl["COGS_LINE"]= sl["QTY"] * sl["PUR_RATE"]  # Qty × purchase rate (pre-discount)
+        sl["COGS_LINE"]= sl["QTY"] * sl["PUR_RATE"] + sl["DISC_SCM"]  # QTY×T_RATE + scheme cost
         sl["SALE_GST"] = sl["SGSTAMT"] + sl["CGSTAMT"] + sl["IGSTAMT"] + sl["CESSAMT"]
-        sl["SALE_DISC"]= sl["CDAMT"] + sl["DISC_SCM"]  # total sale discount
+        sl["SALE_DISC"]= sl["CDAMT"]  # only cash discount given to customer (DISC_SCM is in COGS)
         sl = sl[sl["_dt"].notna()]
         # Bill key = VOU_NO + VOU_TYPE (CCB and CRB have separate numbering)
         sl["BILL_KEY"] = sl["VOU_NO"].astype(str) + "_" + sl["VOU_TYPE"]
@@ -485,8 +490,6 @@ def build_daybook(folder: Path) -> list:
     # PUR_RATE is the actual purchase cost of the batch sold
     merged["cogs"] = merged["cogs_line"].round(2)
 
-    # Gross Profit 2 = Net Sale - COGS
-    merged["gross_profit2"] = (merged["net_sale"] - merged["cogs"]).round(2)
 
     # Calendar columns
     merged["dow"]     = merged["date"].dt.strftime("%a")
@@ -498,8 +501,6 @@ def build_daybook(folder: Path) -> list:
                         + "-" + merged["date"].dt.year.astype(str)
     merged["year"]    = merged["date"].dt.year.astype(str)
 
-    merged["gp2_margin_pct"] = (merged["gross_profit2"] /
-        merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["margin_pct"]     = (merged["gross_profit"] /
         merged["net_sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
     merged["net_margin_pct"] = (merged["net_profit"] /
@@ -508,7 +509,7 @@ def build_daybook(folder: Path) -> list:
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
     for c in ["sale","net_sale","purchase","net_purchase","pur_gross","pur_gst","collection",
-              "credit_note","debit_note","cogs","gross_profit","gross_profit2","net_profit","expenses","tax",
+              "credit_note","debit_note","cogs","gross_profit","net_profit","expenses","tax",
               "op_stock","cl_stock"]:
         if c in merged.columns: merged[c] = merged[c].round(2)
 
@@ -520,7 +521,7 @@ def build_daybook(folder: Path) -> list:
     if rows:
         print(f"  Range       : {rows[0]['date']} \u2192 {rows[-1]['date']}")
     print(f"  Gross Sale  : {inr(tot('sale'))}")
-    print(f"  Sale Disc   : {inr(tot('sale_disc'))}  (CD + scheme + coll disc)")
+    print(f"  Sale Disc   : {inr(tot('sale_disc'))}  (CD only — scheme disc in COGS)")
     print(f"  Net Sale    : {inr(tot('net_sale'))}")
     print(f"  Gross Pur   : {inr(tot('purchase'))}")
     print(f"  Pur Disc    : {inr(tot('pur_discount'))}  (item + scheme)")
