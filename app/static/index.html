@@ -311,11 +311,11 @@ function dbAgg(rows,gk){
     if(!m[k])m[k]={period:k,date:r.date,dow:r.dow||'',
       sale:0,sale_gst:0,sale_disc:0,purchase:0,pur_gross:0,pur_gst:0,
       pur_discount:0,collection:0,collection_discount:0,credit_note:0,debit_note:0,
-      gross_profit:0,net_profit:0,net_sale:0,net_purchase:0,cogs:0,expenses:0,tax:0,bills:0,pur_bills:0,
+      gross_profit:0,prft_amt:0,net_profit:0,net_sale:0,net_purchase:0,cogs:0,expenses:0,tax:0,bills:0,pur_bills:0,
       op_stock:r.op_stock,cl_stock:r.cl_stock,_rows:[]};
     const x=m[k];
     ['sale','sale_gst','sale_disc','purchase','pur_gross','pur_gst','pur_discount',
-     'collection','collection_discount','credit_note','debit_note','gross_profit','net_profit','net_sale','net_purchase','cogs','expenses','tax','bills','pur_bills']
+     'collection','collection_discount','credit_note','debit_note','gross_profit','prft_amt','net_profit','net_sale','net_purchase','cogs','expenses','tax','bills','pur_bills']
       .forEach(c=>x[c]+=(parseFloat(r[c])||0));
     x.cl_stock=r.cl_stock; x._rows.push(r);
   });
@@ -453,7 +453,7 @@ function dbRenderKPIs(){
     {l:'Net Sale',     v:inr(t.net_sale||0),    s:'Sale - all discounts'},
     {l:'Net Purchase', v:inr(t.net_purchase||0), s:'Purchase - pur disc'},
     {l:'COGS',           v:inr(t.cogs||0),           s:'Op stk + Net pur - Cl stk'},
-    {l:'Gross profit',    v:inr(t.gross_profit||0),  s:'PRFT_AMT - disc '+pct(t.gross_profit||0,t.net_sale||0),c:'pos'},
+    {l:'Gross profit',    v:inr(t.gross_profit||0),  s:'Net sale - COGS '+pct(t.gross_profit||0,t.net_sale||0),c:'pos'},
     {l:'Sale CN',      v:inr(t.credit_note),  s:'Customer returns',c:'neg'},
     {l:'Pur DN',       v:inr(t.debit_note),   s:'Supplier returns',c:'pos'},
     {l:'Expenses',     v:inr(t.expenses||0),  s:'Bank stmt coming soon'},
@@ -554,7 +554,7 @@ function dbRenderTbl(disp){
   const rows=disp.slice(STATE.pg*PS,(STATE.pg+1)*PS);
   const tot=disp.reduce((a,r)=>{
     ['sale','sale_disc','purchase','pur_gst','pur_discount','collection','collection_discount',
-     'net_sale','net_purchase','cogs','gross_profit','net_profit','credit_note','debit_note','expenses','bills']
+     'net_sale','net_purchase','cogs','gross_profit','prft_amt','net_profit','credit_note','debit_note','expenses','bills']
       .forEach(k=>a[k]=(a[k]||0)+(parseFloat(r[k])||0));
     return a;
   },{});

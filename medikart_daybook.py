@@ -186,6 +186,8 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         sl["DISC_SCM"] = n(col(sl, "DISC_SCM"))  # scheme discount
         sl["SALE"]     = sl["QTY"] * sl["RATE"]
         sl["COGS_LINE"]= sl["QTY"] * sl["PUR_RATE"] + sl["DISC_SCM"]  # QTY×T_RATE + scheme cost
+        # Only include rows with QTY>0 for PRFT_AMT to exclude adjustment/reversal entries
+        sl["PRFT_AMT"] = sl["PRFT_AMT"].where(sl["QTY"] > 0, 0)
         sl["SALE_GST"] = sl["SGSTAMT"] + sl["CGSTAMT"] + sl["IGSTAMT"] + sl["CESSAMT"]
         sl["SALE_DISC"]= sl["CDAMT"]  # only cash discount given to customer (DISC_SCM is in COGS)
         sl = sl[sl["_dt"].notna()]
@@ -439,13 +441,12 @@ def build_daybook(folder: Path) -> list:
     # Full trading account (Net Sale - COGS) is better at monthly level
     # where stock figures are reliable.
 
-    # Gross Profit 1 = PRFT_AMT - Sale Disc - Collection Disc
-    # PRFT_AMT is profit before discounts, so deduct all sale discounts
-    merged["gross_profit"] = (
-        merged["profit"]
-        - merged["sale_disc"]
-        - merged["collection_discount"]
-    ).round(2)
+    # Gross Profit = Net Sale - COGS (reliable formula from first principles)
+    # PRFT_AMT has data quality issues in some periods so not used as primary
+    # Net Sale = Sale - Sale Disc - Coll Disc (already calculated above)
+    # COGS = QTY × T_RATE + DISC_SCM (calculated after stock section below)
+    # Note: gross_profit calculated after cogs is set (see below)
+    merged["prft_amt"]     = merged["profit"].round(2)  # keep as reference
 
     # Net Sale = Gross Sale - Sale Disc - Collection Disc
     merged["net_sale"]      = (
@@ -487,8 +488,10 @@ def build_daybook(folder: Path) -> list:
     merged["cl_stock"] = cl_vals
 
     # COGS = Qty × PUR_RATE (purchase rate before discount) from TR sale lines
-    # PUR_RATE is the actual purchase cost of the batch sold
     merged["cogs"] = merged["cogs_line"].round(2)
+
+    # Gross Profit = Net Sale - COGS
+    merged["gross_profit"] = (merged["net_sale"] - merged["cogs"]).round(2)
 
 
     # Calendar columns
@@ -509,7 +512,7 @@ def build_daybook(folder: Path) -> list:
         merged["sale"].replace(0, float("nan")) * 100).fillna(0).round(2)
 
     for c in ["sale","net_sale","purchase","net_purchase","pur_gross","pur_gst","collection",
-              "credit_note","debit_note","cogs","gross_profit","net_profit","expenses","tax",
+              "credit_note","debit_note","cogs","prft_amt","gross_profit","net_profit","expenses","tax",
               "op_stock","cl_stock"]:
         if c in merged.columns: merged[c] = merged[c].round(2)
 
