@@ -170,6 +170,7 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         sl["_dt"]      = d(col(sl, "TR_DATE"))
         sl["QTY"]      = n(col(sl, "QTY"))
         sl["RATE"]     = n(col(sl, "RATE"))
+        sl["PUR_RATE"] = n(col(sl, "T_RATE"))   # T_RATE = taxable purchase rate (closest to COGS)
         sl["PRFT_AMT"] = n(col(sl, "PRFT_AMT"))
         sl["SGSTAMT"]  = n(col(sl, "SGSTAMT"))
         sl["CGSTAMT"]  = n(col(sl, "CGSTAMT"))
@@ -179,6 +180,7 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         sl["CDAMT"]    = n(col(sl, "CDAMT"))     # cash discount given to customer
         sl["DISC_SCM"] = n(col(sl, "DISC_SCM"))  # scheme discount
         sl["SALE"]     = sl["QTY"] * sl["RATE"]
+        sl["COGS_LINE"]= sl["QTY"] * sl["PUR_RATE"]  # Qty × purchase rate (pre-discount)
         sl["SALE_GST"] = sl["SGSTAMT"] + sl["CGSTAMT"] + sl["IGSTAMT"] + sl["CESSAMT"]
         sl["SALE_DISC"]= sl["CDAMT"] + sl["DISC_SCM"]  # total sale discount
         sl = sl[sl["_dt"].notna()]
@@ -189,6 +191,7 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
                     sale_gst =("SALE_GST",  "sum"),
                     sale_disc=("SALE_DISC", "sum"),  # CDAMT + DISC_SCM
                     profit   =("PRFT_AMT",  "sum"),
+                    cogs_line=("COGS_LINE", "sum"),  # Qty × PUR_RATE (pre-discount)
                     sale_qty =("QTY",       "sum"),
                     bills    =("BILL_KEY",  "nunique"))
                .reset_index().rename(columns={"_dt": "date"}))
@@ -215,7 +218,7 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
         result = g
         print("  [WARN] Using TRCSHR as sale fallback — accuracy limited")
 
-    for c in ["sale", "sale_gst", "sale_disc", "profit", "bills", "sale_qty"]:
+    for c in ["sale", "sale_gst", "sale_disc", "profit", "bills", "sale_qty", "cogs_line"]:
         if c not in result.columns: result[c] = 0.0
         result[c] = n(result[c])
 
@@ -223,7 +226,7 @@ def daily_sales(trcshr: pd.DataFrame, sale_lines: pd.DataFrame) -> pd.DataFrame:
     mask = result["profit"] == 0
     result.loc[mask, "profit"] = result.loc[mask, "sale"] * 0.12
 
-    return result[["date","sale","sale_gst","sale_disc","profit","bills","sale_qty"]].fillna(0)
+    return result[["date","sale","sale_gst","sale_disc","profit","cogs_line","bills","sale_qty"]].fillna(0)
 
 
 def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
@@ -241,7 +244,7 @@ def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
         pm["_dt"]      = d(col(pm, "BILL_DT"))
         pm["AMT_NET"]  = n(col(pm, "AMT_NET"))
         pm["GROS_AMT"] = n(col(pm, "GROS_AMT"))
-        pm["DISC_AMT"] = n(col(pm, "DISC_AMT"))
+        pm["DISC_AMT"] = n(col(pm, "TOT_DISC")) + n(col(pm, "DISC_AMT"))  # item disc + bill disc
         pm["TOT_SCM"]  = n(col(pm, "TOT_SCM"))
         # GST from PURCHMAST header fields
         pm["GST"] = (n(col(pm,"SGSTAMT1")) + n(col(pm,"SGSTAMT2")) + n(col(pm,"SGSTAMT3")) +
@@ -289,7 +292,7 @@ def daily_purchase(purch: pd.DataFrame, purchmast: pd.DataFrame = None,
                 pur_scm_amt  =("SCM_AMT",  "sum"),
                 pur_bills    =("BILL_NO",  "nunique"))
            .reset_index().rename(columns={"_dt": "date"}))
-    g["pur_discount"] = g["pur_item_disc"] + g["pur_scm_amt"]
+    g["pur_discount"] = g["pur_item_disc"] + g["pur_scm_amt"]  # stored as-is from DB
     g["date"] = pd.to_datetime(g["date"])
     return g
 
@@ -419,7 +422,7 @@ def build_daybook(folder: Path) -> list:
     merged["date"] = pd.to_datetime(merged["date"])
 
     for c in ["sale","sale_gst","sale_disc","purchase","pur_gross","pur_gst",
-              "pur_discount","pur_item_disc","pur_scm_amt",
+              "pur_discount","pur_item_disc","pur_scm_amt","cogs_line",
               "collection","collection_discount","credit_note",
               "debit_note","profit","bills","pur_bills","sale_qty","receipts"]:
         if c not in merged.columns: merged[c] = 0.0
@@ -473,14 +476,11 @@ def build_daybook(folder: Path) -> list:
     merged["op_stock"] = op_vals
     merged["cl_stock"] = cl_vals
 
-    # COGS = Opening Stock + Net Purchase - Closing Stock
-    merged["cogs"] = (
-        merged["op_stock"]
-        + merged["net_purchase"]
-        - merged["cl_stock"]
-    ).round(2)
+    # COGS = Qty × PUR_RATE (purchase rate before discount) from TR sale lines
+    # PUR_RATE is the actual purchase cost of the batch sold
+    merged["cogs"] = merged["cogs_line"].round(2)
 
-    # Gross Profit 2 = Net Sale - COGS (trading account formula)
+    # Gross Profit 2 = Net Sale - COGS
     merged["gross_profit2"] = (merged["net_sale"] - merged["cogs"]).round(2)
 
     # Calendar columns
